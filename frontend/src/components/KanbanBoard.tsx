@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -8,16 +8,46 @@ import {
   useSensor,
   useSensors,
   closestCorners,
+  pointerWithin,
+  type CollisionDetection,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
-import { createId, initialData, moveCard, type BoardData } from "@/lib/kanban";
+import { createId, moveCard, type BoardData } from "@/lib/kanban";
+import { loadBoard, saveBoard } from "@/lib/boardStorage";
 
-export const KanbanBoard = () => {
-  const [board, setBoard] = useState<BoardData>(() => initialData);
+const collisionDetection: CollisionDetection = (args) => {
+  const pointerCollisions = pointerWithin(args);
+  return pointerCollisions.length > 0 ? pointerCollisions : closestCorners(args);
+};
+
+type KanbanBoardProps = {
+  onLogout: () => void;
+  loggingOut: boolean;
+  logoutError: string;
+};
+
+export const KanbanBoard = ({ onLogout, loggingOut, logoutError }: KanbanBoardProps) => {
+  const [initialBoard] = useState(loadBoard);
+  const [board, setBoard] = useState<BoardData>(initialBoard.board);
+  const [storageError, setStorageError] = useState(initialBoard.error);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
+  const boardRef = useRef(board);
+
+  const updateBoard = (update: (current: BoardData) => BoardData) => {
+    const next = update(boardRef.current);
+    boardRef.current = next;
+    setBoard(next);
+    if (!initialBoard.canSave) return;
+    try {
+      saveBoard(next);
+      setStorageError("");
+    } catch {
+      setStorageError("Unable to save the board in this tab. Changes may be lost.");
+    }
+  };
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -39,14 +69,14 @@ export const KanbanBoard = () => {
       return;
     }
 
-    setBoard((prev) => ({
+    updateBoard((prev) => ({
       ...prev,
       columns: moveCard(prev.columns, active.id as string, over.id as string),
     }));
   };
 
   const handleRenameColumn = (columnId: string, title: string) => {
-    setBoard((prev) => ({
+    updateBoard((prev) => ({
       ...prev,
       columns: prev.columns.map((column) =>
         column.id === columnId ? { ...column, title } : column
@@ -56,7 +86,7 @@ export const KanbanBoard = () => {
 
   const handleAddCard = (columnId: string, title: string, details: string) => {
     const id = createId("card");
-    setBoard((prev) => ({
+    updateBoard((prev) => ({
       ...prev,
       cards: {
         ...prev.cards,
@@ -71,7 +101,7 @@ export const KanbanBoard = () => {
   };
 
   const handleDeleteCard = (columnId: string, cardId: string) => {
-    setBoard((prev) => {
+    updateBoard((prev) => {
       return {
         ...prev,
         cards: Object.fromEntries(
@@ -111,13 +141,24 @@ export const KanbanBoard = () => {
                 and capture quick notes without getting buried in settings.
               </p>
             </div>
-            <div className="rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] px-5 py-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--gray-text)]">
-                Focus
-              </p>
-              <p className="mt-2 text-lg font-semibold text-[var(--primary-blue)]">
-                One board. Five columns. Zero clutter.
-              </p>
+            <div className="space-y-3">
+              <div className="rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] px-5 py-4">
+                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--gray-text)]">
+                  Focus
+                </p>
+                <p className="mt-2 text-lg font-semibold text-[var(--primary-blue)]">
+                  One board. Five columns. Zero clutter.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={onLogout}
+                disabled={loggingOut}
+                className="rounded-full border border-[var(--stroke)] px-4 py-2 text-sm font-semibold text-[var(--navy-dark)] hover:border-[var(--primary-blue)] disabled:opacity-60"
+              >
+                {loggingOut ? "Signing out..." : "Sign out"}
+              </button>
+              {logoutError && <p role="alert" className="text-sm text-red-700">{logoutError}</p>}
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-4">
@@ -131,11 +172,12 @@ export const KanbanBoard = () => {
               </div>
             ))}
           </div>
+          {storageError && <p role="alert" className="text-sm text-red-700">{storageError}</p>}
         </header>
 
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCorners}
+          collisionDetection={collisionDetection}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >

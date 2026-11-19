@@ -22,4 +22,23 @@ describe("moveCard", () => {
     expect(result[0].cardIds).toEqual(["card-2"]);
     expect(result[1].cardIds).toEqual(["card-3", "card-1"]);
   });
+
+  it("moves a card to an empty column", () => {
+    const columns = [...baseColumns, { id: "col-c", title: "C", cardIds: [] }];
+    const result = moveCard(columns, "card-1", "col-c");
+    expect(result[0].cardIds).toEqual(["card-2"]);
+    expect(result[2].cardIds).toEqual(["card-1"]);
+  });
+
+  it("appends a card dropped on its own column", () => {
+    expect(moveCard(baseColumns, "card-1", "col-a")[0].cardIds).toEqual([
+      "card-2",
+      "card-1",
+    ]);
+  });
+
+  it("leaves the board unchanged for unknown cards or targets", () => {
+    expect(moveCard(baseColumns, "missing-card", "col-b")).toBe(baseColumns);
+    expect(moveCard(baseColumns, "card-1", "missing-target")).toBe(baseColumns);
+  });
 });
