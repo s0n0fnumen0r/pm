@@ -1,6 +1,6 @@
 # Database approach
 
-Status: approved and implemented in Part 6. Frontend integration remains Part 7.
+Status: approved; the database and API were implemented in Part 6 and integrated with the frontend in Part 7.
 
 ## Representation
 
@@ -21,7 +21,7 @@ On the first successful board access for the signed-in MVP user, create the user
 
 The backend and frontend share `backend/app/initial_board.json`; a frontend test checks that it matches the approved JSON specification.
 
-The current tab-only `sessionStorage` board is separate from the database. Do not silently overwrite an existing database board or delete tab data during the transition. In Part 7, ask the user whether to import the current tab's board; permit an import only against a seeded board still at revision 0, using that revision as the precondition. On conflict or failure, retain the tab data and show an error.
+The previous tab-only `sessionStorage` board is separate from the database. The frontend offers to import it only against a seeded board still at revision 0, using that revision as the precondition. Otherwise it reports that import is unavailable. The user can keep the database board; the old tab data is never deleted. On conflict or failure, the tab data is retained and an error is shown.
 
 ## API shape and operations
 
@@ -36,7 +36,7 @@ The full-board update supports creating, editing, moving, and deleting cards and
 
 Read each board and its revision from one consistent transaction. For a write, start a transaction, resolve ownership from the authenticated user, validate the entire proposed board, and compare the expected revision. Apply the data changes and increment the revision once; commit together, or roll back everything. The revision check and mutation occur within the same write transaction so competing requests cannot both succeed from the same revision.
 
-The frontend must serialize or coalesce its own rapid edits and use the latest confirmed revision; it must not discard unsaved changes or report them as saved while a write is pending or has failed.
+The frontend serializes its own rapid edits and uses the latest confirmed revision. It shows pending or failed saves, retains unsaved edits for retry, and only replaces them with the latest database board after the user chooses to discard them. It warns before navigating away from unsaved changes and disables ordinary sign-out while they remain.
 
 SQLite checks unique constraints immediately. To reorder or move cards without transient position collisions, first move existing positions to a disjoint high range within the transaction, then remove deleted cards and assign final zero-based positions and column IDs, inserting new cards as needed. Check errors and roll back rather than leaving partially applied moves.
 

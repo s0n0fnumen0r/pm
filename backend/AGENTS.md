@@ -10,4 +10,4 @@ Follow the project-level `AGENTS.md` and `docs/PLAN.md`.
 - The Docker build copies the Next.js static export to `app/static/` in the image; that directory is not maintained as backend source.
 - `pyproject.toml` and `uv.lock` define Python dependencies; the Docker image uses `uv` to install them.
 - `tests/test_main.py` tests the exported page and JavaScript asset, the API, and a missing API route. `tests/test_auth.py` covers sessions, credentials, logout, expiration, and request-origin/host restrictions. `tests/test_board.py` exercises board operations, validation, user isolation, concurrent conflicts, rollback, and initialization. The Dockerfile's `test` stage builds the frontend and runs the backend tests.
-- Compose mounts the persistent `board-data` volume at `/data`; the frontend still uses tab storage until Part 7.
+- Compose mounts the persistent `board-data` volume at `/data`; the frontend uses the authenticated board API and offers optional import of previous tab data.

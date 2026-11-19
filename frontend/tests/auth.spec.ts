@@ -1,4 +1,9 @@
 import { expect, test } from "@playwright/test";
+import { resetTestBoard } from "./board-test-setup";
+
+test.beforeEach(async ({ request, baseURL }) => {
+  await resetTestBoard(request, baseURL);
+});
 
 test("requires valid credentials, keeps a session on refresh, and signs out", async ({ page }) => {
   await page.goto("/");
@@ -73,7 +78,7 @@ test("reports an expired session when checking on page load", async ({ page }) =
   await expect(page.getByTestId("column-col-backlog")).toHaveCount(0);
 });
 
-test("keeps board changes through refresh and sign-out in the same tab", async ({ page, context }) => {
+test("keeps board changes through refresh, sign-out, and a new tab", async ({ page, context }) => {
   await page.goto("/");
   await page.getByLabel("Username").fill("user");
   await page.getByLabel("Password").fill("password");
@@ -95,6 +100,7 @@ test("keeps board changes through refresh and sign-out in the same tab", async (
   await page.mouse.move(target.x + target.width / 2, target.y + 120, { steps: 12 });
   await page.mouse.up();
   await expect(review.getByTestId("card-card-1")).toBeVisible();
+  await expect(page.getByText("All changes saved.")).toBeVisible();
 
   const checkBoard = async () => {
     await expect(backlog.getByLabel("Column title")).toHaveValue("Ideas");
@@ -115,7 +121,7 @@ test("keeps board changes through refresh and sign-out in the same tab", async (
 
   const otherTab = await context.newPage();
   await otherTab.goto("/");
-  await expect(otherTab.getByTestId("column-col-backlog").getByLabel("Column title")).toHaveValue("Backlog");
-  await expect(otherTab.getByText("Remember this")).toHaveCount(0);
+  await expect(otherTab.getByTestId("column-col-backlog").getByLabel("Column title")).toHaveValue("Ideas");
+  await expect(otherTab.getByText("Remember this")).toBeVisible();
   await otherTab.close();
 });

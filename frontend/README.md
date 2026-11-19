@@ -17,6 +17,4 @@ npm run test:unit
 npm run test:e2e
 ```
 
-Start the Docker app before running browser tests. Use an installed browser by setting `$env:PLAYWRIGHT_BROWSER_CHANNEL="msedge"` (or `"chrome"`) in PowerShell, or install Playwright's browser with `npx playwright install chromium --only-shell`.
-
-The tests default to `http://127.0.0.1:8765`; set `PLAYWRIGHT_BASE_URL` to use another running server.
+Browser tests reset the board. Run them only against a separate test container with its own disposable volume, never your normal app. Set `PLAYWRIGHT_BASE_URL` to that container, `KANBAN_ISOLATED_TEST=1`, and `PLAYWRIGHT_BROWSER_CHANNEL=msedge` (or `chrome`). For the restart test, set `KANBAN_TEST_CONTAINER_ID` to the isolated container ID; its name must start with `kanban-part7-test-`. To test the legacy import, set `KANBAN_FRESH_TEST=1` and run `npx playwright test migration.spec.ts` against a fresh isolated volume before running the rest of the suite.

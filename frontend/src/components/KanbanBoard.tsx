@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -15,8 +15,8 @@ import {
 } from "@dnd-kit/core";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
-import { createId, moveCard, type BoardData } from "@/lib/kanban";
-import { loadBoard, saveBoard } from "@/lib/boardStorage";
+import { createId, moveCard } from "@/lib/kanban";
+import { useBoard } from "@/lib/useBoard";
 
 const collisionDetection: CollisionDetection = (args) => {
   const pointerCollisions = pointerWithin(args);
@@ -25,37 +25,36 @@ const collisionDetection: CollisionDetection = (args) => {
 
 type KanbanBoardProps = {
   onLogout: () => void;
+  onSessionExpired: () => void;
   loggingOut: boolean;
   logoutError: string;
 };
 
-export const KanbanBoard = ({ onLogout, loggingOut, logoutError }: KanbanBoardProps) => {
-  const [initialBoard] = useState(loadBoard);
-  const [board, setBoard] = useState<BoardData>(initialBoard.board);
-  const [storageError, setStorageError] = useState(initialBoard.error);
+export const KanbanBoard = ({ onLogout, onSessionExpired, loggingOut, logoutError }: KanbanBoardProps) => {
+  const { board, status, warning, legacy, legacyBlocked, updateBoard, retrySave,
+    loadLatest, importLegacy, keepDatabaseBoard, retryLoad } = useBoard(onSessionExpired);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
-  const boardRef = useRef(board);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [reauthenticating, setReauthenticating] = useState(false);
+  const [reauthError, setReauthError] = useState("");
+  const [editingCards, setEditingCards] = useState<Set<string>>(new Set());
 
-  const updateBoard = (update: (current: BoardData) => BoardData) => {
-    const next = update(boardRef.current);
-    boardRef.current = next;
-    setBoard(next);
-    if (!initialBoard.canSave) return;
-    try {
-      saveBoard(next);
-      setStorageError("");
-    } catch {
-      setStorageError("Unable to save the board in this tab. Changes may be lost.");
-    }
-  };
+  useEffect(() => {
+    if (editingCards.size === 0) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [editingCards]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 6 },
     })
   );
-
-  const cardsById = useMemo(() => board.cards, [board.cards]);
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveCardId(event.active.id as string);
@@ -65,7 +64,7 @@ export const KanbanBoard = ({ onLogout, loggingOut, logoutError }: KanbanBoardPr
     const { active, over } = event;
     setActiveCardId(null);
 
-    if (!over || active.id === over.id) {
+    if (loggingOut || status === "reloading" || !over || active.id === over.id) {
       return;
     }
 
@@ -85,7 +84,7 @@ export const KanbanBoard = ({ onLogout, loggingOut, logoutError }: KanbanBoardPr
   };
 
   const handleAddCard = (columnId: string, title: string, details: string) => {
-    const id = createId("card");
+    const id = createId();
     updateBoard((prev) => ({
       ...prev,
       cards: {
@@ -119,7 +118,50 @@ export const KanbanBoard = ({ onLogout, loggingOut, logoutError }: KanbanBoardPr
     });
   };
 
-  const activeCard = activeCardId ? cardsById[activeCardId] : null;
+  const handleEditCard = (cardId: string, title: string, details: string) => {
+    updateBoard((prev) => ({
+      ...prev,
+      cards: { ...prev.cards, [cardId]: { ...prev.cards[cardId], title, details } },
+    }));
+  };
+
+  const handleEditingChange = (cardId: string, editing: boolean) => {
+    setEditingCards((current) => {
+      const next = new Set(current);
+      if (editing) next.add(cardId);
+      else next.delete(cardId);
+      return next;
+    });
+  };
+
+  const handleReauthenticate = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setReauthenticating(true);
+    setReauthError("");
+    try {
+      const response = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      if (response.status === 401) {
+        setReauthError("Invalid username or password.");
+      } else if (!response.ok) {
+        setReauthError("Unable to sign in. Please try again.");
+      } else {
+        setPassword("");
+        retrySave();
+      }
+    } catch {
+      setReauthError("Unable to sign in. Please try again.");
+    } finally {
+      setReauthenticating(false);
+    }
+  };
+
+  const activeCard = activeCardId && board ? board.cards[activeCardId] : null;
+  const unsaved = editingCards.size > 0 || status === "saving" || status === "error" ||
+    status === "conflict" || status === "expired" || status === "reloading";
 
   return (
     <div className="relative overflow-hidden">
@@ -153,7 +195,7 @@ export const KanbanBoard = ({ onLogout, loggingOut, logoutError }: KanbanBoardPr
               <button
                 type="button"
                 onClick={onLogout}
-                disabled={loggingOut}
+                disabled={loggingOut || unsaved}
                 className="rounded-full border border-[var(--stroke)] px-4 py-2 text-sm font-semibold text-[var(--navy-dark)] hover:border-[var(--primary-blue)] disabled:opacity-60"
               >
                 {loggingOut ? "Signing out..." : "Sign out"}
@@ -162,7 +204,7 @@ export const KanbanBoard = ({ onLogout, loggingOut, logoutError }: KanbanBoardPr
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-4">
-            {board.columns.map((column) => (
+            {board?.columns.map((column) => (
               <div
                 key={column.id}
                 className="flex items-center gap-2 rounded-full border border-[var(--stroke)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--navy-dark)]"
@@ -172,16 +214,66 @@ export const KanbanBoard = ({ onLogout, loggingOut, logoutError }: KanbanBoardPr
               </div>
             ))}
           </div>
-          {storageError && <p role="alert" className="text-sm text-red-700">{storageError}</p>}
+          {status === "loading" && <p role="status">Loading board...</p>}
+          {status === "load-error" && (
+            <div role="alert" className="text-sm text-red-700">
+              Unable to load the board. <button type="button" onClick={retryLoad} className="underline">Try again</button>
+            </div>
+          )}
+          {board && <p role="status" className="text-sm text-[var(--gray-text)]">
+            {editingCards.size > 0 ? "Card edits are not saved until you select Save." :
+              status === "saved" ? "All changes saved." : status === "saving" ? "Saving changes..." : ""}
+          </p>}
+          {warning && <p role="alert" className="text-sm text-red-700">{warning}</p>}
+          {legacy && (
+            <div className="space-y-3 rounded-xl border border-[var(--stroke)] p-4 text-sm">
+              {legacyBlocked ? (
+                <p>A previous board remains in this tab, but the database board has changed and cannot be replaced by an import.</p>
+              ) : (
+                <p>A previous board was found in this tab. Import it into the untouched database board, or use the database board instead.</p>
+              )}
+              <div className="flex flex-wrap gap-3">
+                {!legacyBlocked && <button type="button" onClick={importLegacy} className="rounded-full bg-[var(--secondary-purple)] px-4 py-2 font-semibold text-white">Import tab board</button>}
+                <button type="button" onClick={keepDatabaseBoard} className="rounded-full border border-[var(--stroke)] px-4 py-2 font-semibold">
+                  {legacyBlocked ? "Dismiss" : "Use database board"}
+                </button>
+              </div>
+            </div>
+          )}
+          {(status === "error" || status === "conflict" || status === "expired" || status === "reloading") && (
+            <div className="space-y-3 rounded-xl border border-red-200 p-4 text-sm">
+              <p role="alert" className="text-red-700">
+                {status === "error" && "Unable to save. Your changes are not saved."}
+                {status === "conflict" && "The board changed elsewhere. Your changes are not saved. Loading the latest board will discard these local changes."}
+                {status === "expired" && "Your session expired. Your changes are not saved. Sign in again to retry."}
+                {status === "reloading" && "Loading the latest board..."}
+              </p>
+              {status === "error" && <button type="button" onClick={retrySave} className="mr-3 underline">Retry save</button>}
+              {status === "conflict" && <button type="button" disabled={editingCards.size > 0} onClick={() => void loadLatest()} className="mr-3 underline disabled:opacity-50">Load latest board</button>}
+              {status !== "reloading" && (
+                <button type="button" onClick={onLogout} disabled={loggingOut || editingCards.size > 0} className="underline disabled:opacity-50">
+                  Discard unsaved changes and sign out
+                </button>
+              )}
+              {status === "expired" && (
+                <form onSubmit={handleReauthenticate} className="flex flex-wrap items-end gap-3">
+                  <label>Username<input required autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} className="block rounded-xl border border-[var(--stroke)] px-3 py-2" /></label>
+                  <label>Password<input required type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} className="block rounded-xl border border-[var(--stroke)] px-3 py-2" /></label>
+                  <button disabled={reauthenticating} type="submit" className="rounded-full bg-[var(--secondary-purple)] px-4 py-2 font-semibold text-white">Sign in and retry</button>
+                  {reauthError && <p role="alert" className="text-red-700">{reauthError}</p>}
+                </form>
+              )}
+            </div>
+          )}
         </header>
 
-        <DndContext
+        {board && (!legacy || legacyBlocked) && <DndContext
           sensors={sensors}
           collisionDetection={collisionDetection}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <section className="grid gap-6 lg:grid-cols-5">
+          <fieldset disabled={loggingOut || status === "reloading"} className="grid min-w-0 gap-6 lg:grid-cols-5">
             {board.columns.map((column) => (
               <KanbanColumn
                 key={column.id}
@@ -190,9 +282,11 @@ export const KanbanBoard = ({ onLogout, loggingOut, logoutError }: KanbanBoardPr
                 onRename={handleRenameColumn}
                 onAddCard={handleAddCard}
                 onDeleteCard={handleDeleteCard}
+                onEditCard={handleEditCard}
+                onEditingChange={handleEditingChange}
               />
             ))}
-          </section>
+          </fieldset>
           <DragOverlay>
             {activeCard ? (
               <div className="w-[260px]">
@@ -200,7 +294,7 @@ export const KanbanBoard = ({ onLogout, loggingOut, logoutError }: KanbanBoardPr
               </div>
             ) : null}
           </DragOverlay>
-        </DndContext>
+        </DndContext>}
       </main>
     </div>
   );

@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
+import { resetTestBoard } from "./board-test-setup";
 
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page, request, baseURL }) => {
+  await resetTestBoard(request, baseURL);
   await page.goto("/");
   await page.getByLabel("Username").fill("user");
   await page.getByLabel("Password").fill("password");
@@ -17,6 +19,7 @@ test("renames a column and updates the header", async ({ page }) => {
   const firstColumn = page.getByTestId("column-col-backlog");
   await firstColumn.getByLabel("Column title").fill("Ideas");
   await expect(page.getByRole("main").getByText("Ideas", { exact: true })).toBeVisible();
+  await expect(page.getByText("All changes saved.")).toBeVisible();
 });
 
 test("adds and removes a card", async ({ page }) => {
@@ -26,8 +29,20 @@ test("adds and removes a card", async ({ page }) => {
   await firstColumn.getByPlaceholder("Details").fill("Added via e2e.");
   await firstColumn.getByRole("button", { name: /add card/i }).click();
   await expect(firstColumn.getByText("Playwright card")).toBeVisible();
-  await firstColumn.getByRole("button", { name: "Delete Playwright card", exact: true }).click();
-  await expect(firstColumn.getByText("Playwright card")).not.toBeVisible();
+  const cardId = await firstColumn.locator("article").filter({ hasText: "Playwright card" }).getAttribute("data-testid");
+  if (!cardId) throw new Error("New card has no test ID");
+  const card = page.getByTestId(cardId);
+  await card.getByRole("button", { name: "Edit Playwright card" }).click();
+  await card.getByLabel("Edit card title").fill("Edited card");
+  await card.getByLabel("Edit card details").fill("Edited via e2e.");
+  await card.getByRole("button", { name: "Save" }).click();
+  await expect(firstColumn.getByText("Edited via e2e.")).toBeVisible();
+  await expect(page.getByText("All changes saved.")).toBeVisible();
+  await page.reload();
+  await expect(firstColumn.getByText("Edited card")).toBeVisible();
+  await firstColumn.getByRole("button", { name: "Delete Edited card", exact: true }).click();
+  await expect(firstColumn.getByText("Edited card")).not.toBeVisible();
+  await expect(page.getByText("All changes saved.")).toBeVisible();
 });
 
 test("serves frontend assets and API routes together", async ({ page, request }) => {
@@ -67,6 +82,7 @@ test("moves a card between columns", async ({ page }) => {
   );
   await page.mouse.up();
   await expect(targetColumn.getByTestId("card-card-1")).toBeVisible();
+  await expect(page.getByText("All changes saved.")).toBeVisible();
 });
 
 for (const { name, cardId, offset } of [
@@ -97,6 +113,7 @@ for (const { name, cardId, offset } of [
     await page.mouse.up();
 
     await expect(targetColumn.getByTestId(`card-${cardId}`)).toBeVisible();
+    await expect(page.getByText("All changes saved.")).toBeVisible();
   });
 }
 
@@ -115,4 +132,5 @@ test("reorders cards within a column", async ({ page }) => {
   await page.mouse.up();
 
   await expect(column.locator('[data-testid^="card-"]').first()).toHaveAttribute("data-testid", "card-card-2");
+  await expect(page.getByText("All changes saved.")).toBeVisible();
 });

@@ -1,26 +1,28 @@
 import { initialData, type BoardData } from "@/lib/kanban";
 
 export const BOARD_STORAGE_KEY = "kanban-studio-board";
+const MIGRATION_KEY = "kanban-studio-board-migration";
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-const isBoardData = (value: unknown): value is BoardData => {
+export const isBoardData = (value: unknown): value is BoardData => {
   if (!isRecord(value) || !Array.isArray(value.columns) || !isRecord(value.cards)) {
     return false;
   }
-
   const cards = value.cards;
+  const columnIds = initialData.columns.map((column) => column.id);
   if (!Object.entries(cards).every(([id, card]) =>
-    isRecord(card) && card.id === id && typeof card.title === "string" && typeof card.details === "string"
+    id.length > 0 && !columnIds.includes(id) && isRecord(card) &&
+    card.id === id && typeof card.title === "string" && card.title.trim().length > 0 &&
+    typeof card.details === "string"
   )) {
     return false;
   }
-
   const cardIds: string[] = [];
-  const validColumns = value.columns.length === initialData.columns.length &&
+  const validColumns = value.columns.length === columnIds.length &&
     value.columns.every((column, index) => {
-      if (!isRecord(column) || column.id !== initialData.columns[index].id ||
+      if (!isRecord(column) || column.id !== columnIds[index] ||
           typeof column.title !== "string" || !Array.isArray(column.cardIds)) {
         return false;
       }
@@ -30,31 +32,25 @@ const isBoardData = (value: unknown): value is BoardData => {
       }
       return true;
     });
-
   return validColumns && new Set(cardIds).size === cardIds.length &&
     cardIds.length === Object.keys(cards).length;
 };
 
-export const loadBoard = (): { board: BoardData; canSave: boolean; error: string } => {
-  if (typeof window === "undefined") {
-    return { board: initialData, canSave: true, error: "" };
-  }
-
+export const readLegacyBoard = (): { board: BoardData | null; warning: string } => {
   try {
-    const saved = window.sessionStorage.getItem(BOARD_STORAGE_KEY);
-    if (saved === null) return { board: initialData, canSave: true, error: "" };
+    if (sessionStorage.getItem(MIGRATION_KEY) === "handled") return { board: null, warning: "" };
+    const saved = sessionStorage.getItem(BOARD_STORAGE_KEY);
+    if (saved === null) return { board: null, warning: "" };
     const board: unknown = JSON.parse(saved);
-    if (!isBoardData(board)) throw new Error("Invalid saved board");
-    return { board, canSave: true, error: "" };
+    if (!isBoardData(board)) {
+      return { board: null, warning: "The previous tab board is invalid and was not imported. Its data has been retained." };
+    }
+    return { board, warning: "" };
   } catch {
-    return {
-      board: initialData,
-      canSave: false,
-      error: "The saved board could not be loaded. Changes will not be saved in this tab.",
-    };
+    return { board: null, warning: "The previous tab board could not be read. Its data has not been changed." };
   }
 };
 
-export const saveBoard = (board: BoardData) => {
-  window.sessionStorage.setItem(BOARD_STORAGE_KEY, JSON.stringify(board));
+export const markLegacyHandled = () => {
+  sessionStorage.setItem(MIGRATION_KEY, "handled");
 };

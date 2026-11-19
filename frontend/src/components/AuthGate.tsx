@@ -93,7 +93,15 @@ export const AuthGate = () => {
   };
 
   if (view === "signed-in") {
-    return <KanbanBoard onLogout={handleLogout} loggingOut={busy} logoutError={error} />;
+    return <KanbanBoard
+      onLogout={handleLogout}
+      onSessionExpired={() => {
+        setError("Your session has expired. Please sign in again.");
+        setView("signed-out");
+      }}
+      loggingOut={busy}
+      logoutError={error}
+    />;
   }
 
   return (

@@ -2,13 +2,19 @@
 
 ## Scope and decisions
 
+- Parts 1–7 are implemented; Part 7 is awaiting user review. Parts 8–10 remain.
 - One local Docker container serves the static Next.js frontend and FastAPI API. The MVP login is `user` / `password`; the data model supports multiple users and one board per user.
-- New users receive the existing demo board, including its five columns and cards. Existing boards are never re-seeded on restart.
-- The current demo supports login, renaming columns, adding and removing cards, and drag-and-drop; editing existing cards, connecting the frontend to durable persistence, and AI chat still need to be added.
-- Until database integration, board changes are temporarily kept in the current browser tab's session storage across refresh and sign-out; they are not shared or durable.
-- The Part 5 schema was approved: use SQLite tables for users, boards, columns, and cards, including explicit ordering and ownership, and exchange boards as JSON through the API.
+- Authentication is local-only: eight-hour, in-memory server sessions use an HTTP-only SameSite Strict cookie; state-changing requests require the same origin. Server restarts clear sessions, and only loopback hosts are accepted.
+- The approved normalized SQLite schema stores one board per user in `/data/kanban.sqlite3` on the persistent `board-data` volume. New users receive the existing demo board, including its five columns and cards. Existing boards are never re-seeded on restart. See [the database approach](database-approach.md) and [schema](database-schema.json).
+- The five column IDs and their order are fixed; titles are renameable and may be empty. Cards have board-scoped IDs, non-blank titles, details, and an explicit position. New frontend card IDs are UUIDs.
+- Authenticated `GET /api/board` loads the board; same-origin `PUT /api/board` replaces it atomically using an expected revision. The backend validates ownership, fixed columns, card references, and ordering, and returns a conflict rather than overwriting a newer revision.
+- The frontend supports login, renaming columns, adding, editing and removing cards, and drag-and-drop, with durable board persistence. AI chat still needs to be added.
+- Frontend edits are saved automatically in serialized, revision-checked requests. Pending and failed saves are visible; conflicts retain local edits until the user chooses to load the latest board. Session expiry permits reauthentication and retry. Ordinary sign-out is disabled while edits are unsaved, and navigation triggers a warning; unsaved edits themselves are not durable.
+- Previous tab-only boards can be imported with the user's consent only if the database board remains at revision 0. The import uses that revision as a precondition; old tab data is retained on acceptance, refusal, conflict, or failure.
+- Browser tests use an isolated container and volume because they reset the test board. They run with an installed Chrome or Edge; Playwright's Chromium download stalled, so Edge was used for verification.
 - Keep the OpenRouter key server-side. The configured model is `nvidia/nemotron-3-ultra-550b-a55b:free`; verify its availability and Structured Outputs support rather than assuming either.
 - Preserve the existing visual style and the color scheme in the project instructions. Keep the README concise.
+- The Part 6 Docker `npm ci` reported 25 dependency vulnerabilities, including 4 critical. They were not investigated or fixed in Parts 6–7; current counts have not been reverified.
 
 ## Part 1: Plan
 
@@ -55,7 +61,7 @@
 
 **Tests:** Cover correct and incorrect credentials, missing or invalid sessions, logout, and attempts to access protected APIs; exercise login, refresh, and logout in browser tests.
 
-**Results:** Seven backend tests passed, including credential, session, logout, expiration, and cross-origin checks. Thirteen browser tests passed using Edge, including login, refresh, logout, failure handling, and existing board interactions. Frontend lint, 10 unit tests, and the Docker production build passed. No board API exists yet; future board endpoints must require the server session.
+**Results:** Seven backend tests passed, including credential, session, logout, expiration, and cross-origin checks. Thirteen browser tests passed using Edge, including login, refresh, logout, failure handling, and existing board interactions. Frontend lint, 10 unit tests, and the Docker production build passed. At that stage no board API existed; authenticated board endpoints were added in Part 6.
 
 **Success:** A fresh visit requires login, valid credentials open the board, invalid credentials do not, and logout prevents further authenticated access.
 
@@ -68,7 +74,7 @@
 
 **Validation:** Check the proposal against the current board data shape and every required create, edit, move, rename, delete, ordering, and per-user access operation.
 
-**Results:** The proposed seed matches the current frontend demo exactly. An in-memory SQLite exercise of the proposed table definitions covered user isolation, constraint rejection, create/edit/move/delete/rename/order, a revision precondition, cascading deletion, and rollback. This validates the proposal, not an implemented API or real concurrent requests.
+**Results:** The proposed seed matched the frontend demo exactly. An in-memory SQLite exercise of the proposed table definitions covered user isolation, constraint rejection, create/edit/move/delete/rename/order, a revision precondition, cascading deletion, and rollback. This validated the proposal, not an implemented API or real concurrent requests.
 
 **Success:** The schema and database approach are documented in `docs/` and approved by the user.
 
@@ -81,17 +87,19 @@
 
 **Tests:** Backend unit and API integration tests with isolated temporary databases: first initialization, demo seeding, no reseeding, each operation and ordering, invalid input, unauthorized access, user isolation, transaction rollback, and stale-update conflicts. Verify persistence across a container restart.
 
-**Results:** All 26 backend tests passed in Docker, including concurrent writes and transaction rollback. The shared demo seed matches the approved schema; frontend lint and 13 unit tests passed. A board update survived a real container restart and reauthentication using an isolated volume. The updated app is running and all 14 Edge browser regression tests passed. The frontend remains on tab storage until Part 7.
+**Results:** All 26 backend tests passed in Docker, including concurrent writes and transaction rollback. The shared demo seed matches the approved schema; frontend lint and 13 unit tests passed. A board update survived a real container restart and reauthentication using an isolated volume. The updated app was running and all 14 Edge browser regression tests passed. At that stage the frontend still used tab storage; Part 7 connected it to the API.
 
 **Success:** The authenticated API can read and modify the correct board safely, and data survives restarts.
 
 ## Part 7: Frontend and backend
 
-- [ ] Replace in-memory demo state with authenticated API loading and mutations while preserving the existing board experience.
-- [ ] Add an interface for editing card titles and details; retain adding, deleting, renaming, and drag-and-drop.
-- [ ] Handle loading, failed saves, session expiry, and conflicts visibly without presenting unsaved edits as persisted. Refresh or reconcile the board after conflicts.
+- [x] Replace in-memory demo state with authenticated API loading and mutations while preserving the existing board experience.
+- [x] Add an interface for editing card titles and details; retain adding, deleting, renaming, and drag-and-drop.
+- [x] Handle loading, failed saves, session expiry, and conflicts visibly without presenting unsaved edits as persisted. Refresh or reconcile the board after conflicts.
 
 **Tests:** Frontend unit/integration tests for loading, editing, mutations, errors, and conflicts; browser tests for login, all board operations, reload, logout/login, and persistence after container restart.
+
+**Results:** Frontend lint, TypeScript checking, and 19 unit/integration tests passed. The Docker production build and 26 backend tests passed. On an isolated database, 17 Edge browser tests passed, including legacy import, editing, all existing interactions, refresh and sign-out, concurrent-tab conflicts, and persistence through a container restart. Browser tests reset only the isolated test board.
 
 **Success:** All required board interactions persist, survive reload and restart, and failures are visible to the user.
 

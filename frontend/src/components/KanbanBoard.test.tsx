@@ -1,84 +1,243 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { KanbanBoard } from "@/components/KanbanBoard";
-import * as boardStorage from "@/lib/boardStorage";
+import { BOARD_STORAGE_KEY } from "@/lib/boardStorage";
+import { initialData, type BoardData } from "@/lib/kanban";
 
-const getFirstColumn = () => screen.getAllByTestId(/column-/i)[0];
-const renderBoard = () => render(<KanbanBoard onLogout={() => {}} loggingOut={false} logoutError="" />);
+let serverBoard: BoardData;
+let revision: number;
+let putOverride: ((update: { revision: number; board: BoardData }) => Promise<Response>) | undefined;
 
-describe("KanbanBoard", () => {
-  beforeEach(() => sessionStorage.clear());
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
-  it("renders five columns", () => {
-    renderBoard();
-    expect(screen.getAllByTestId(/column-/i)).toHaveLength(5);
-  });
+const renderBoard = () => render(
+  <KanbanBoard onLogout={() => {}} onSessionExpired={() => {}} loggingOut={false} logoutError="" />
+);
+const firstColumn = async () => screen.findByTestId("column-col-backlog");
+const saved = () => screen.findByText("All changes saved.");
 
-  it("renames a column", async () => {
-    renderBoard();
-    const column = getFirstColumn();
-    const input = within(column).getByLabelText("Column title");
-    await userEvent.clear(input);
-    await userEvent.type(input, "New Name");
-    expect(input).toHaveValue("New Name");
-  });
+beforeEach(() => {
+  sessionStorage.clear();
+  serverBoard = structuredClone(initialData);
+  revision = 0;
+  putOverride = undefined;
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === "/api/login") return json({ username: "user" });
+    if (url !== "/api/board") throw new Error(`Unexpected request: ${url}`);
+    if (init?.method !== "PUT") return json({ revision, board: serverBoard });
+    const update: { revision: number; board: BoardData } = JSON.parse(String(init.body));
+    if (putOverride) return putOverride(update);
+    if (update.revision !== revision) return json({ detail: "conflict" }, 409);
+    serverBoard = update.board;
+    revision += 1;
+    return json({ revision, board: serverBoard });
+  }));
+});
 
-  it("adds and removes a card", async () => {
-    renderBoard();
-    const column = getFirstColumn();
-    const addButton = within(column).getByRole("button", {
-      name: /add a card/i,
-    });
-    await userEvent.click(addButton);
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
-    const titleInput = within(column).getByPlaceholderText(/card title/i);
-    await userEvent.type(titleInput, "New card");
-    const detailsInput = within(column).getByPlaceholderText(/details/i);
-    await userEvent.type(detailsInput, "Notes");
+it("loads and persists rename, card creation, editing, and deletion", async () => {
+  renderBoard();
+  const column = await firstColumn();
+  expect(screen.getAllByTestId(/column-/i)).toHaveLength(5);
+  fireEvent.change(within(column).getByLabelText("Column title"), { target: { value: "Ideas" } });
+  await saved();
+  expect(serverBoard.columns[0].title).toBe("Ideas");
 
-    await userEvent.click(within(column).getByRole("button", { name: /add card/i }));
+  await userEvent.click(within(column).getByRole("button", { name: /add a card/i }));
+  await userEvent.type(within(column).getByPlaceholderText("Card title"), "New card");
+  await userEvent.type(within(column).getByPlaceholderText("Details"), "Notes");
+  await userEvent.click(within(column).getByRole("button", { name: /^Add card$/ }));
+  await saved();
+  const card = within(column).getByText("New card").closest("article")!;
+  await userEvent.click(within(card).getByRole("button", { name: "Edit New card" }));
+  expect(card).not.toHaveAttribute("aria-disabled", "true");
+  expect(screen.getByText("Card edits are not saved until you select Save.")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Sign out" })).toBeDisabled();
+  await userEvent.clear(within(card).getByLabelText("Edit card title"));
+  await userEvent.type(within(card).getByLabelText("Edit card title"), "   ");
+  await userEvent.click(within(card).getByRole("button", { name: "Save" }));
+  expect(within(card).getByRole("alert")).toHaveTextContent("A card title is required.");
+  await userEvent.clear(within(card).getByLabelText("Edit card title"));
+  await userEvent.type(within(card).getByLabelText("Edit card title"), "Edited card");
+  await userEvent.clear(within(card).getByLabelText("Edit card details"));
+  await userEvent.type(within(card).getByLabelText("Edit card details"), "Edited notes");
+  await userEvent.click(within(card).getByRole("button", { name: "Save" }));
+  await saved();
+  expect(within(column).getByText("Edited notes")).toBeInTheDocument();
+  expect(Object.values(serverBoard.cards).some((item) => item.title === "Edited card" && item.details === "Edited notes")).toBe(true);
 
-    expect(within(column).getByText("New card")).toBeInTheDocument();
+  await userEvent.click(within(column).getByRole("button", { name: "Delete Edited card" }));
+  await saved();
+  expect(Object.values(serverBoard.cards).some((item) => item.title === "Edited card")).toBe(false);
+});
 
-    const deleteButton = within(column).getByRole("button", {
-      name: /delete new card/i,
-    });
-    await userEvent.click(deleteButton);
-
-    expect(within(column).queryByText("New card")).not.toBeInTheDocument();
-  });
-
-  it("rejects a whitespace-only title and resets the form on cancel", async () => {
-    renderBoard();
-    const column = getFirstColumn();
-    await userEvent.click(within(column).getByRole("button", { name: /add a card/i }));
-    await userEvent.type(within(column).getByPlaceholderText(/card title/i), "   ");
-    await userEvent.click(within(column).getByRole("button", { name: /add card/i }));
-    expect(within(column).getByPlaceholderText(/card title/i)).toBeInTheDocument();
-    expect(within(column).getAllByTestId(/card-/)).toHaveLength(2);
-    await userEvent.click(within(column).getByRole("button", { name: /cancel/i }));
-    await userEvent.click(within(column).getByRole("button", { name: /add a card/i }));
-    expect(within(column).getByPlaceholderText(/card title/i)).toHaveValue("");
-  });
-
-  it("reports invalid stored data without overwriting it", async () => {
-    sessionStorage.setItem(boardStorage.BOARD_STORAGE_KEY, '{"columns":[]}');
-    renderBoard();
-    expect(screen.getByRole("alert")).toHaveTextContent("The saved board could not be loaded.");
-    await userEvent.type(within(getFirstColumn()).getByLabelText("Column title"), " changed");
-    expect(sessionStorage.getItem(boardStorage.BOARD_STORAGE_KEY)).toBe('{"columns":[]}');
-  });
-
-  it("reports when tab storage cannot be written", async () => {
-    const write = vi.spyOn(boardStorage, "saveBoard").mockImplementation(() => {
-      throw new DOMException("Storage full", "QuotaExceededError");
-    });
-    try {
-      renderBoard();
-      await userEvent.type(within(getFirstColumn()).getByLabelText("Column title"), " changed");
-      expect(screen.getByRole("alert")).toHaveTextContent("Unable to save the board in this tab.");
-    } finally {
-      write.mockRestore();
+it("serializes rapid edits and saves the latest board with the confirmed revision", async () => {
+  let release: ((response: Response) => void) | undefined;
+  let firstUpdate: { revision: number; board: BoardData } | undefined;
+  putOverride = async (update) => {
+    if (!firstUpdate) {
+      firstUpdate = update;
+      return new Promise<Response>((resolve) => { release = resolve; });
     }
-  });
+    expect(update.revision).toBe(1);
+    serverBoard = update.board;
+    revision = 2;
+    return json({ revision, board: serverBoard });
+  };
+  renderBoard();
+  const input = within(await firstColumn()).getByLabelText("Column title");
+  fireEvent.change(input, { target: { value: "First" } });
+  fireEvent.change(input, { target: { value: "Final" } });
+  expect(screen.getByText("Saving changes...")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Sign out" })).toBeDisabled();
+  expect(firstUpdate?.board.columns[0].title).toBe("First");
+  release!(json({ revision: 1, board: firstUpdate!.board }));
+  await saved();
+  expect(serverBoard.columns[0].title).toBe("Final");
+  expect(revision).toBe(2);
+});
+
+it("rejects a blank new card and clears the cancelled form", async () => {
+  renderBoard();
+  const column = await firstColumn();
+  await userEvent.click(within(column).getByRole("button", { name: "Add a card" }));
+  await userEvent.type(within(column).getByPlaceholderText("Card title"), "   ");
+  await userEvent.click(within(column).getByRole("button", { name: /^Add card$/ }));
+  expect(within(column).getAllByTestId(/card-/)).toHaveLength(2);
+  await userEvent.click(within(column).getByRole("button", { name: "Cancel" }));
+  await userEvent.click(within(column).getByRole("button", { name: "Add a card" }));
+  expect(within(column).getByPlaceholderText("Card title")).toHaveValue("");
+});
+
+it("keeps failed edits visible and retries without claiming they were saved", async () => {
+  putOverride = async () => json({ detail: "unavailable" }, 503);
+  renderBoard();
+  const input = within(await firstColumn()).getByLabelText("Column title");
+  fireEvent.change(input, { target: { value: "Unsaved" } });
+  expect(await screen.findByRole("alert")).toHaveTextContent("Your changes are not saved");
+  expect(input).toHaveValue("Unsaved");
+  expect(screen.getByRole("button", { name: "Sign out" })).toBeDisabled();
+  const leave = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(leave);
+  expect(leave.defaultPrevented).toBe(true);
+  putOverride = undefined;
+  await userEvent.click(screen.getByRole("button", { name: "Retry save" }));
+  await saved();
+  expect(serverBoard.columns[0].title).toBe("Unsaved");
+  const savedLeave = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(savedLeave);
+  expect(savedLeave.defaultPrevented).toBe(false);
+});
+
+it("does not overwrite a newer board on conflict", async () => {
+  putOverride = async () => {
+    serverBoard.columns[0].title = "Changed elsewhere";
+    revision = 1;
+    return json({ detail: "conflict" }, 409);
+  };
+  renderBoard();
+  const input = within(await firstColumn()).getByLabelText("Column title");
+  fireEvent.change(input, { target: { value: "Local edit" } });
+  expect(await screen.findByRole("alert")).toHaveTextContent("changed elsewhere");
+  expect(input).toHaveValue("Local edit");
+  await userEvent.click(screen.getByRole("button", { name: "Load latest board" }));
+  await saved();
+  expect(input).toHaveValue("Changed elsewhere");
+  expect(serverBoard.columns[0].title).toBe("Changed elsewhere");
+});
+
+it("retains unsaved edits through session expiration and retries after sign-in", async () => {
+  putOverride = async () => json({ detail: "expired" }, 401);
+  renderBoard();
+  const input = within(await firstColumn()).getByLabelText("Column title");
+  fireEvent.change(input, { target: { value: "Keep this" } });
+  expect(await screen.findByRole("alert")).toHaveTextContent("session expired");
+  expect(input).toHaveValue("Keep this");
+  putOverride = undefined;
+  await userEvent.type(screen.getByLabelText("Username"), "user");
+  await userEvent.type(screen.getByLabelText("Password"), "password");
+  await userEvent.click(screen.getByRole("button", { name: "Sign in and retry" }));
+  await saved();
+  expect(serverBoard.columns[0].title).toBe("Keep this");
+});
+
+it("asks before importing a tab board and retains the original tab data", async () => {
+  const legacy = structuredClone(initialData);
+  legacy.columns[0].title = "Previous tab";
+  const raw = JSON.stringify(legacy);
+  sessionStorage.setItem(BOARD_STORAGE_KEY, raw);
+  renderBoard();
+  expect(await screen.findByText(/previous board was found/i)).toBeInTheDocument();
+  expect(screen.queryByTestId("column-col-backlog")).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Import tab board" }));
+  await saved();
+  expect(serverBoard.columns[0].title).toBe("Previous tab");
+  expect(sessionStorage.getItem(BOARD_STORAGE_KEY)).toBe(raw);
+});
+
+it("keeps the database board when import is declined and remembers the choice", async () => {
+  const legacy = structuredClone(initialData);
+  legacy.columns[0].title = "Previous tab";
+  const raw = JSON.stringify(legacy);
+  sessionStorage.setItem(BOARD_STORAGE_KEY, raw);
+  const { unmount } = renderBoard();
+  await userEvent.click(await screen.findByRole("button", { name: "Use database board" }));
+  expect(within(await firstColumn()).getByLabelText("Column title")).toHaveValue("Backlog");
+  expect(serverBoard.columns[0].title).toBe("Backlog");
+  expect(sessionStorage.getItem(BOARD_STORAGE_KEY)).toBe(raw);
+  unmount();
+  renderBoard();
+  await firstColumn();
+  expect(screen.queryByRole("button", { name: "Import tab board" })).not.toBeInTheDocument();
+});
+
+it("does not offer an import over a changed database board", async () => {
+  sessionStorage.setItem(BOARD_STORAGE_KEY, JSON.stringify(initialData));
+  revision = 1;
+  serverBoard.columns[0].title = "Database board";
+  renderBoard();
+  expect(await screen.findByText(/database board has changed/i)).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Import tab board" })).not.toBeInTheDocument();
+  expect(within(await firstColumn()).getByLabelText("Column title")).toHaveValue("Database board");
+});
+
+it("retains tab data when another update wins an import race", async () => {
+  const legacy = structuredClone(initialData);
+  legacy.columns[0].title = "Previous tab";
+  const raw = JSON.stringify(legacy);
+  sessionStorage.setItem(BOARD_STORAGE_KEY, raw);
+  putOverride = async () => {
+    serverBoard.columns[0].title = "Changed elsewhere";
+    revision = 1;
+    return json({ detail: "conflict" }, 409);
+  };
+  renderBoard();
+  await userEvent.click(await screen.findByRole("button", { name: "Import tab board" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("changed elsewhere");
+  expect(sessionStorage.getItem(BOARD_STORAGE_KEY)).toBe(raw);
+  expect(within(await firstColumn()).getByLabelText("Column title")).toHaveValue("Previous tab");
+  await userEvent.click(screen.getByRole("button", { name: "Load latest board" }));
+  expect(within(await firstColumn()).getByLabelText("Column title")).toHaveValue("Changed elsewhere");
+  expect(sessionStorage.getItem(BOARD_STORAGE_KEY)).toBe(raw);
+});
+
+it("reports invalid prior tab data without overwriting it", async () => {
+  sessionStorage.setItem(BOARD_STORAGE_KEY, '{"columns":[]}');
+  renderBoard();
+  expect(await screen.findByRole("alert")).toHaveTextContent("previous tab board is invalid");
+  expect(await firstColumn()).toBeInTheDocument();
+  expect(sessionStorage.getItem(BOARD_STORAGE_KEY)).toBe('{"columns":[]}');
+});
+
+it("retries a failed initial board load", async () => {
+  const fetchMock = vi.mocked(fetch);
+  fetchMock.mockImplementationOnce(async () => json({}, 503));
+  renderBoard();
+  expect(await screen.findByRole("alert")).toHaveTextContent("Unable to load the board");
+  await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+  await waitFor(() => expect(screen.getByTestId("column-col-backlog")).toBeInTheDocument());
 });
