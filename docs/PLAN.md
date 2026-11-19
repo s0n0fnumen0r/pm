@@ -12,7 +12,7 @@
 - Frontend edits are saved automatically in serialized, revision-checked requests. Pending and failed saves are visible; conflicts retain local edits until the user chooses to load the latest board. Session expiry permits reauthentication and retry. Ordinary sign-out is disabled while edits are unsaved, and navigation triggers a warning; unsaved edits themselves are not durable.
 - Previous tab-only boards can be imported with the user's consent only if the database board remains at revision 0. The import uses that revision as a precondition; old tab data is retained on acceptance, refusal, conflict, or failure.
 - Browser tests use an isolated container and volume because they reset the test board. They run with an installed Chrome or Edge; Playwright's Chromium download stalled, so Edge was used for verification.
-- Keep the OpenRouter key server-side. The configured model is `nvidia/nemotron-3-ultra-550b-a55b:free`; verify its availability and Structured Outputs support rather than assuming either.
+- Keep the OpenRouter key server-side. The current model is `nvidia/nemotron-3.5-super-vl:free`, selected after the original `nvidia/nemotron-3-ultra-550b-a55b:free` model failed the Structured Outputs check.
 - Preserve the existing visual style and the color scheme in the project instructions. Keep the README concise.
 - The Part 6 Docker `npm ci` reported 25 dependency vulnerabilities, including 4 critical. They were not investigated or fixed in Parts 6–7; current counts have not been reverified.
 
@@ -117,12 +117,14 @@
 
 ## Part 9: AI board updates
 
-- [ ] Extend the authenticated backend chat call to send the current board JSON, the user's message, and conversation history to the configured model.
-- [ ] Define and request a Structured Outputs schema containing the assistant response and an optional board update. Verify provider/model support during the live check; do not silently substitute an unstructured response.
-- [ ] Validate proposed updates against the approved board schema, ownership, fixed columns, and ordering; apply valid updates atomically and reject stale or invalid updates without changing the board.
-- [ ] Return the assistant response and the resulting board or revision to the frontend. Surface provider, validation, and conflict errors.
+- [x] Extend the authenticated backend chat call to send the current board JSON, the user's message, and conversation history to the configured model.
+- [x] Define and request a Structured Outputs schema containing the assistant response and an optional board update. Verify provider/model support during the live check; do not silently substitute an unstructured response.
+- [x] Validate proposed updates against the approved board schema, ownership, fixed columns, and ordering; apply valid updates atomically and reject stale or invalid updates without changing the board.
+- [x] Return the assistant response and the resulting board or revision to the frontend. Surface provider, validation, and conflict errors.
 
 **Tests:** Mock no-update and multi-card create/edit/move responses, conversation context, invalid structured output, provider failures, unauthorized access, and concurrent board updates. Perform a live Structured Outputs check when available.
+
+**Results:** The Docker test stage passed all 41 backend tests and built the frontend export. Mocked cases cover no-update and multi-card create/edit/move responses, conversation context, invalid proposals, unauthorized access, provider failures, and revision conflicts; invalid or stale proposals leave the board unchanged. The configured `nvidia/nemotron-3-ultra-550b-a55b:free` model did not support OpenRouter `response_format` and returned HTTP 404 when parameter-compatible routing was required. Per user approval, the model was changed to `nvidia/nemotron-3.5-super-vl:free`; a separate live Structured Outputs request with a synthetic arithmetic prompt passed schema validation and returned a correct answer. No unstructured fallback is used.
 
 **Success:** Chat answers can be returned without a board change, valid AI changes persist atomically, and invalid or stale changes cannot silently alter the board.
 

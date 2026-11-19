@@ -117,11 +117,15 @@ def get_board(response: Response, username: str = Depends(require_user)) -> Boar
 @router.put("/board", response_model=BoardResponse, dependencies=[Depends(require_same_origin)])
 def update_board(update: BoardUpdate, response: Response, username: str = Depends(require_user)) -> BoardResponse:
     response.headers["Cache-Control"] = "no-store"
+    return replace_board(username, update.revision, update.board)
+
+
+def replace_board(username: str, expected_revision: int, board: Board) -> BoardResponse:
     with connection() as db, transaction(db, write=True):
         board_id = get_or_create_board(db, username)
         changed = db.execute(
             "UPDATE boards SET revision = revision + 1 WHERE id = ? AND revision = ?",
-            (board_id, update.revision),
+            (board_id, expected_revision),
         ).rowcount
         if changed != 1:
             raise HTTPException(status_code=409, detail="Board has changed; reload before saving")
@@ -132,19 +136,19 @@ def update_board(update: BoardUpdate, response: Response, username: str = Depend
         max_position = db.execute(
             "SELECT COALESCE(MAX(position), -1) FROM cards WHERE board_id = ?", (board_id,)
         ).fetchone()[0]
-        max_final_position = max((len(column.cardIds) - 1 for column in update.board.columns), default=-1)
+        max_final_position = max((len(column.cardIds) - 1 for column in board.columns), default=-1)
         shift = max(max_position, max_final_position) + 1
         db.execute("UPDATE cards SET position = position + ? WHERE board_id = ?", (shift, board_id))
 
-        for card_id in existing_ids - update.board.cards.keys():
+        for card_id in existing_ids - board.cards.keys():
             db.execute("DELETE FROM cards WHERE board_id = ? AND id = ?", (board_id, card_id))
-        for column in update.board.columns:
+        for column in board.columns:
             db.execute(
                 "UPDATE board_columns SET title = ? WHERE board_id = ? AND id = ?",
                 (column.title, board_id, column.id),
             )
             for position, card_id in enumerate(column.cardIds):
-                card = update.board.cards[card_id]
+                card = board.cards[card_id]
                 if card_id in existing_ids:
                     db.execute(
                         "UPDATE cards SET column_id = ?, title = ?, details = ?, position = ? WHERE board_id = ? AND id = ?",
