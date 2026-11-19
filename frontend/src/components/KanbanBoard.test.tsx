@@ -7,6 +7,7 @@ import { initialData, type BoardData } from "@/lib/kanban";
 let serverBoard: BoardData;
 let revision: number;
 let putOverride: ((update: { revision: number; board: BoardData }) => Promise<Response>) | undefined;
+let chatOverride: ((request: { message: string; history: { role: string; content: string }[] }) => Promise<Response>) | undefined;
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -22,8 +23,13 @@ beforeEach(() => {
   serverBoard = structuredClone(initialData);
   revision = 0;
   putOverride = undefined;
+  chatOverride = undefined;
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
     if (url === "/api/login") return json({ username: "user" });
+    if (url === "/api/ai/chat") {
+      if (!chatOverride) throw new Error("Unexpected chat request");
+      return chatOverride(JSON.parse(String(init?.body)));
+    }
     if (url !== "/api/board") throw new Error(`Unexpected request: ${url}`);
     if (init?.method !== "PUT") return json({ revision, board: serverBoard });
     const update: { revision: number; board: BoardData } = JSON.parse(String(init.body));
@@ -240,4 +246,34 @@ it("retries a failed initial board load", async () => {
   expect(await screen.findByRole("alert")).toHaveTextContent("Unable to load the board");
   await userEvent.click(screen.getByRole("button", { name: "Try again" }));
   await waitFor(() => expect(screen.getByTestId("column-col-backlog")).toBeInTheDocument());
+});
+
+it("applies an AI board update to the visible board", async () => {
+  const updated = structuredClone(initialData);
+  updated.columns[0].cardIds = updated.columns[0].cardIds.filter((id) => id !== "card-1");
+  updated.columns[2].cardIds.push("card-1");
+  updated.cards["card-1"].title = "AI updated card";
+  updated.cards["card-1"].details = "AI updated details";
+  updated.columns[4].cardIds.push("ai-created-card");
+  updated.cards["ai-created-card"] = {
+    id: "ai-created-card",
+    title: "AI created card",
+    details: "Added by the assistant",
+  };
+  chatOverride = async () => {
+    serverBoard = updated;
+    revision = 1;
+    return json({ response: "Moved and added cards.", board: serverBoard, revision });
+  };
+  renderBoard();
+
+  await firstColumn();
+  await userEvent.type(screen.getByLabelText("Message the assistant"), "Move and add cards");
+  await userEvent.click(screen.getByRole("button", { name: "Send" }));
+
+  expect(await screen.findByText("Moved and added cards.")).toBeInTheDocument();
+  expect(within(screen.getByTestId("column-col-progress")).getByTestId("card-card-1")).toHaveTextContent("AI updated card");
+  expect(within(screen.getByTestId("column-col-done")).getByTestId("card-ai-created-card")).toHaveTextContent("AI created card");
+  expect(await saved()).toBeInTheDocument();
+  expect(serverBoard).toEqual(updated);
 });

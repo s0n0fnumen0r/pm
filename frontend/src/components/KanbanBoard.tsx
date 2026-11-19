@@ -13,6 +13,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
+import { AIChatSidebar } from "@/components/AIChatSidebar";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
 import { createId, moveCard } from "@/lib/kanban";
@@ -32,13 +33,14 @@ type KanbanBoardProps = {
 
 export const KanbanBoard = ({ onLogout, onSessionExpired, loggingOut, logoutError }: KanbanBoardProps) => {
   const { board, status, warning, legacy, legacyBlocked, updateBoard, retrySave,
-    loadLatest, importLegacy, keepDatabaseBoard, retryLoad } = useBoard(onSessionExpired);
+    loadLatest, importLegacy, keepDatabaseBoard, retryLoad, acceptServerBoard } = useBoard(onSessionExpired);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [reauthenticating, setReauthenticating] = useState(false);
   const [reauthError, setReauthError] = useState("");
   const [editingCards, setEditingCards] = useState<Set<string>>(new Set());
+  const [chatPending, setChatPending] = useState(false);
 
   useEffect(() => {
     if (editingCards.size === 0) return;
@@ -64,7 +66,7 @@ export const KanbanBoard = ({ onLogout, onSessionExpired, loggingOut, logoutErro
     const { active, over } = event;
     setActiveCardId(null);
 
-    if (loggingOut || status === "reloading" || !over || active.id === over.id) {
+    if (loggingOut || chatPending || status === "reloading" || !over || active.id === over.id) {
       return;
     }
 
@@ -161,7 +163,7 @@ export const KanbanBoard = ({ onLogout, onSessionExpired, loggingOut, logoutErro
 
   const activeCard = activeCardId && board ? board.cards[activeCardId] : null;
   const unsaved = editingCards.size > 0 || status === "saving" || status === "error" ||
-    status === "conflict" || status === "expired" || status === "reloading";
+    status === "conflict" || status === "expired" || status === "reloading" || chatPending;
 
   return (
     <div className="relative overflow-hidden">
@@ -267,34 +269,48 @@ export const KanbanBoard = ({ onLogout, onSessionExpired, loggingOut, logoutErro
           )}
         </header>
 
-        {board && (!legacy || legacyBlocked) && <DndContext
-          sensors={sensors}
-          collisionDetection={collisionDetection}
-          onDragStart={handleDragStart}
-          onDragEnd={handleDragEnd}
-        >
-          <fieldset disabled={loggingOut || status === "reloading"} className="grid min-w-0 gap-6 lg:grid-cols-5">
-            {board.columns.map((column) => (
-              <KanbanColumn
-                key={column.id}
-                column={column}
-                cards={column.cardIds.map((cardId) => board.cards[cardId])}
-                onRename={handleRenameColumn}
-                onAddCard={handleAddCard}
-                onDeleteCard={handleDeleteCard}
-                onEditCard={handleEditCard}
-                onEditingChange={handleEditingChange}
-              />
-            ))}
-          </fieldset>
-          <DragOverlay>
-            {activeCard ? (
-              <div className="w-[260px]">
-                <KanbanCardPreview card={activeCard} />
-              </div>
-            ) : null}
-          </DragOverlay>
-        </DndContext>}
+        {board && (!legacy || legacyBlocked) && (
+          <div className="grid items-start gap-6 2xl:grid-cols-[minmax(0,1fr)_340px]">
+            <DndContext
+              sensors={sensors}
+              collisionDetection={collisionDetection}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+            >
+              <fieldset
+                disabled={loggingOut || chatPending || status === "reloading"}
+                className="grid min-w-0 gap-6 lg:grid-cols-5"
+              >
+                {board.columns.map((column) => (
+                  <KanbanColumn
+                    key={column.id}
+                    column={column}
+                    cards={column.cardIds.map((cardId) => board.cards[cardId])}
+                    onRename={handleRenameColumn}
+                    onAddCard={handleAddCard}
+                    onDeleteCard={handleDeleteCard}
+                    onEditCard={handleEditCard}
+                    onEditingChange={handleEditingChange}
+                  />
+                ))}
+              </fieldset>
+              <DragOverlay>
+                {activeCard ? (
+                  <div className="w-[260px]">
+                    <KanbanCardPreview card={activeCard} />
+                  </div>
+                ) : null}
+              </DragOverlay>
+            </DndContext>
+            <AIChatSidebar
+              disabled={loggingOut || status !== "saved" || editingCards.size > 0}
+              onBoardUpdate={acceptServerBoard}
+              onConflict={loadLatest}
+              onPendingChange={setChatPending}
+              onSessionExpired={onSessionExpired}
+            />
+          </div>
+        )}
       </main>
     </div>
   );

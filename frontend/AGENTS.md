@@ -1,18 +1,19 @@
 # Frontend
 
-This is the existing Kanban demo, statically exported and served by FastAPI in Docker. Follow the project-level `AGENTS.md` and `docs/PLAN.md`.
+This is the existing Kanban demo with an AI chat sidebar, statically exported and served by FastAPI in Docker. Follow the project-level `AGENTS.md` and `docs/PLAN.md`.
 
 ## Overview
 
-This is a Next.js App Router application using React, TypeScript, and Tailwind CSS. After local sign-in, its single page displays a persistent Kanban board with five fixed, renameable columns. Users can add, edit, remove, and drag cards within or between columns. The authenticated backend API stores the board in SQLite. AI chat is not implemented yet.
+This is a Next.js App Router application using React, TypeScript, and Tailwind CSS. After local sign-in, its single page displays a persistent Kanban board with five fixed, renameable columns and an AI chat sidebar. Users can add, edit, remove, and drag cards within or between columns. The authenticated backend API stores the board in SQLite and handles AI chat updates.
 
 The rendering and data flow is:
 
 1. `src/app/layout.tsx` wraps `src/app/page.tsx`, which renders `AuthGate`.
 2. `AuthGate` checks the backend session, displays sign-in or an error as needed, and renders `KanbanBoard` only when signed in.
-3. `KanbanBoard` uses `useBoard` to load and save state through the board API, renders columns, and passes data and callbacks down.
-4. Each `KanbanColumn` renders sortable `KanbanCard` components and a `NewCardForm`. Their callbacks update the board in `KanbanBoard`.
-5. dnd-kit supplies drag events; `moveCard` computes the new ordered column contents, and `KanbanCardPreview` appears during a drag.
+3. `KanbanBoard` uses `useBoard` to load and save state through the board API, renders columns and `AIChatSidebar`, and passes data and callbacks down.
+4. `AIChatSidebar` keeps conversation history in the current page session, sends messages to the authenticated AI API, and applies the returned board and revision through `useBoard`.
+5. Each `KanbanColumn` renders sortable `KanbanCard` components and a `NewCardForm`. Their callbacks update the board in `KanbanBoard`.
+6. dnd-kit supplies drag events; `moveCard` computes the new ordered column contents, and `KanbanCardPreview` appears during a drag.
 
 ## Application entry and styling
 
@@ -25,6 +26,7 @@ The rendering and data flow is:
 
 - **`AuthGate`** (`src/components/AuthGate.tsx`): Checks `/api/session` on load, displays sign-in, handles `/api/login` and `/api/logout`, and reports authentication or connectivity errors. It renders the board only for a server-verified session; the session cookie is managed by the backend.
 - **`KanbanBoard`** (`src/components/KanbanBoard.tsx`): The board container. It displays loading, save, conflict, session-expiration, and legacy-import states; tracks drag and card-edit drafts; and owns board mutation callbacks. It prevents ordinary sign-out with unsaved changes, offers reauthentication and retry on session expiry, and warns before leaving with unsaved work. New cards receive a UUID; empty details become `No details yet.` Its dnd-kit context uses pointer-first collision detection with a closest-corners fallback and a `DragOverlay`.
+- **`AIChatSidebar`** (`src/components/AIChatSidebar.tsx`): Displays the current chat, sends the latest message with prior conversation history, reports pending and API errors, and syncs validated board revisions returned by the backend. Chat is disabled while board edits are unsaved or a request is pending.
 - **`KanbanColumn`** (`src/components/KanbanColumn.tsx`): Receives a column, its resolved card objects, and callbacks for renaming, adding, editing, and deleting. It registers the column as a drop target, displays the card count and an editable column title, and renders cards in a vertical `SortableContext`. Empty columns show a drop prompt. Its `NewCardForm` forwards new card values with the column ID.
 - **`KanbanCard`** (`src/components/KanbanCard.tsx`): Registers a sortable card and displays its title, details, edit, and remove controls. Its inline edit form validates a non-blank title, permits cancelling, and disables dragging while open. Edit-draft state is reported to the board.
 - **`KanbanCardPreview`** (`src/components/KanbanCardPreview.tsx`): Receives a card and renders a non-interactive title and details preview inside the board's drag overlay.
@@ -39,16 +41,17 @@ The board data shape separates ordered columns and their `cardIds` from the card
   - `initialData` imports `backend/app/initial_board.json`, shared with the backend, containing five demo columns—Backlog, Discovery, In Progress, Review, and Done—and eight example cards.
   - `moveCard` resolves the source and target from card or column IDs and returns updated column arrays. It supports reordering over a card and appending to a column, including an empty one; invalid or unchanged moves leave the input unchanged.
   - `createId` generates UUIDs for new cards.
-- **`src/lib/useBoard.ts`**: Loads and validates the authenticated board, serializes revision-checked writes, retains unsaved edits on errors, and handles retries, conflicts, and legacy import.
+- **`src/lib/useBoard.ts`**: Loads and validates the authenticated board, serializes revision-checked writes, accepts validated server board/revision responses from AI chat, retains unsaved edits on errors, and handles retries, conflicts, and legacy import.
 - **`src/lib/boardStorage.ts`**: Validates API board data and reads the old tab-storage board for optional import. It retains the old data and records whether the user handled the import prompt.
 
 ## Tests
 
 - **`src/lib/kanban.test.ts`**: Vitest tests for demo seed consistency with the approved database schema, reordering, moving between columns, dropping into empty or existing columns, and invalid moves.
-- **`src/components/KanbanBoard.test.tsx`**: Testing Library tests for API loading, mutations, serialization, editing, errors, conflicts, session expiry, and legacy import.
+- **`src/components/AIChatSidebar.test.tsx`**: Testing Library tests for conversation history, pending and error states, conflict handling, and applying returned board data.
+- **`src/components/KanbanBoard.test.tsx`**: Testing Library tests for API loading, mutations, serialization, editing, errors, conflicts, session expiry, legacy import, and AI board updates.
 - **`src/test/setup.ts`**: Loads `@testing-library/jest-dom` matchers for unit tests.
 - **`src/test/vitest.d.ts`**: Adds Vitest and jest-dom type references for test files.
-- **`tests/kanban.spec.ts`**: Playwright browser tests for loading the board, renaming a column, adding and removing a card, and moving cards within and between columns, including empty columns. Also checks static assets and API routing.
+- **`tests/kanban.spec.ts`**: Playwright browser tests for board interactions and AI chat answers and updates using deterministic API mocks. Also checks static assets and API routing.
 - **`tests/auth.spec.ts`**: Playwright tests for sign-in, session refresh, sign-out, expiration messages, failed requests, and board persistence across tabs.
 - **`tests/persistence.spec.ts`**: Playwright tests for concurrent-tab conflicts and persistence across an isolated container restart.
 - **`tests/migration.spec.ts`**: Tests legacy import against a fresh isolated database when `KANBAN_FRESH_TEST=1`; run it before other tests reset the board.

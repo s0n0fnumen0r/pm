@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { resetTestBoard } from "./board-test-setup";
+import { initialData } from "../src/lib/kanban";
 
 test.beforeEach(async ({ page, request, baseURL }) => {
   await resetTestBoard(request, baseURL);
@@ -43,6 +44,70 @@ test("adds and removes a card", async ({ page }) => {
   await firstColumn.getByRole("button", { name: "Delete Edited card", exact: true }).click();
   await expect(firstColumn.getByText("Edited card")).not.toBeVisible();
   await expect(page.getByText("All changes saved.")).toBeVisible();
+});
+
+test("chat returns an answer without changing the board", async ({ page }) => {
+  let chatRequest: { message: string; history: unknown[] } | undefined;
+  await page.route("**/api/ai/chat", async (route) => {
+    chatRequest = route.request().postDataJSON();
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        response: "There are eight cards on your board.",
+        revision: 0,
+        board: initialData,
+      }),
+    });
+  });
+
+  await page.getByLabel("Message the assistant").fill("How many cards are on my board?");
+  await page.getByRole("button", { name: "Send" }).click();
+
+  await expect(page.getByText("There are eight cards on your board.")).toBeVisible();
+  await expect(page.getByTestId("card-card-1")).toBeVisible();
+  expect(chatRequest).toEqual({ message: "How many cards are on my board?", history: [] });
+});
+
+test("chat displays a multi-card AI update immediately", async ({ page }) => {
+  const updated = structuredClone(initialData);
+  updated.columns[0].cardIds = updated.columns[0].cardIds.filter((id) => id !== "card-1");
+  updated.columns[2].cardIds.push("card-1");
+  updated.cards["card-1"].title = "AI updated card";
+  updated.columns[4].cardIds.push("ai-created-card");
+  updated.cards["ai-created-card"] = {
+    id: "ai-created-card",
+    title: "AI created card",
+    details: "Added by the assistant",
+  };
+  await page.route("**/api/ai/chat", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        response: "Moved and added cards.",
+        revision: 1,
+        board: updated,
+      }),
+    });
+  });
+
+  await page.getByLabel("Message the assistant").fill("Move the first task to In Progress and add a card to Done.");
+  await page.getByRole("button", { name: "Send" }).click();
+
+  await expect(page.getByText("Moved and added cards.")).toBeVisible();
+  await expect(page.getByTestId("column-col-progress").getByTestId("card-card-1")).toContainText("AI updated card");
+  await expect(page.getByTestId("column-col-done").getByTestId("card-ai-created-card")).toContainText("AI created card");
+});
+
+test("keeps the board and chat usable on a narrow screen", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const sidebar = page.getByRole("complementary", { name: "Chat with your board" });
+  await sidebar.scrollIntoViewIfNeeded();
+
+  await expect(page.getByTestId("column-col-backlog")).toBeVisible();
+  await expect(sidebar.getByLabel("Message the assistant")).toBeEnabled();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
 });
 
 test("serves frontend assets and API routes together", async ({ page, request }) => {

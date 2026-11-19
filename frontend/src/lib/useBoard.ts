@@ -144,25 +144,32 @@ export const useBoard = (onSessionExpired: () => void) => {
     void flush();
   };
 
-  const loadLatest = async () => {
+  const loadLatest = async (): Promise<boolean> => {
     setStatus("reloading");
     try {
       const result = await requestBoard();
-      if (!mounted.current) return;
-      boardRef.current = result.board;
-      revision.current = result.revision;
-      savedSequence.current = sequence.current;
-      blocked.current = false;
-      importing.current = false;
-      setBoard(result.board);
-      setWarning("");
-      setStatus("saved");
+      if (!mounted.current) return false;
+      acceptServerBoard(result.board, result.revision);
+      return true;
     } catch (error) {
-      if (!mounted.current) return;
+      if (!mounted.current) return false;
       if (error instanceof BoardRequestError && error.status === 401) setStatus("expired");
       else setStatus("conflict");
       setWarning("Unable to load the latest board. Your unsaved changes are still shown.");
+      return false;
     }
+  };
+
+  const acceptServerBoard = (serverBoard: BoardData, serverRevision: number) => {
+    if (!mounted.current) return;
+    boardRef.current = serverBoard;
+    revision.current = serverRevision;
+    savedSequence.current = sequence.current;
+    blocked.current = false;
+    importing.current = false;
+    setBoard(serverBoard);
+    setWarning("");
+    setStatus("saved");
   };
 
   const importLegacy = () => {
@@ -179,7 +186,7 @@ export const useBoard = (onSessionExpired: () => void) => {
   };
 
   return {
-    board, status, warning, legacy, legacyBlocked, updateBoard, retrySave, loadLatest,
+    board, status, warning, legacy, legacyBlocked, updateBoard, retrySave, loadLatest, acceptServerBoard,
     importLegacy, keepDatabaseBoard, retryLoad: () => {
       setStatus("loading");
       setAttempt((value) => value + 1);

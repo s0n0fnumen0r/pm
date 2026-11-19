@@ -2,13 +2,13 @@
 
 ## Scope and decisions
 
-- Parts 1–7 are implemented; Part 7 is awaiting user review. Parts 8–10 remain.
+- Parts 1–10 are implemented; Part 7 is awaiting user review.
 - One local Docker container serves the static Next.js frontend and FastAPI API. The MVP login is `user` / `password`; the data model supports multiple users and one board per user.
 - Authentication is local-only: eight-hour, in-memory server sessions use an HTTP-only SameSite Strict cookie; state-changing requests require the same origin. Server restarts clear sessions, and only loopback hosts are accepted.
 - The approved normalized SQLite schema stores one board per user in `/data/kanban.sqlite3` on the persistent `board-data` volume. New users receive the existing demo board, including its five columns and cards. Existing boards are never re-seeded on restart. See [the database approach](database-approach.md) and [schema](database-schema.json).
 - The five column IDs and their order are fixed; titles are renameable and may be empty. Cards have board-scoped IDs, non-blank titles, details, and an explicit position. New frontend card IDs are UUIDs.
 - Authenticated `GET /api/board` loads the board; same-origin `PUT /api/board` replaces it atomically using an expected revision. The backend validates ownership, fixed columns, card references, and ordering, and returns a conflict rather than overwriting a newer revision.
-- The frontend supports login, renaming columns, adding, editing and removing cards, and drag-and-drop, with durable board persistence. AI chat still needs to be added.
+- The frontend supports login, renaming columns, adding, editing and removing cards, drag-and-drop, and an AI chat sidebar with durable board updates.
 - Frontend edits are saved automatically in serialized, revision-checked requests. Pending and failed saves are visible; conflicts retain local edits until the user chooses to load the latest board. Session expiry permits reauthentication and retry. Ordinary sign-out is disabled while edits are unsaved, and navigation triggers a warning; unsaved edits themselves are not durable.
 - Previous tab-only boards can be imported with the user's consent only if the database board remains at revision 0. The import uses that revision as a precondition; old tab data is retained on acceptance, refusal, conflict, or failure.
 - Browser tests use an isolated container and volume because they reset the test board. They run with an installed Chrome or Edge; Playwright's Chromium download stalled, so Edge was used for verification.
@@ -130,11 +130,13 @@
 
 ## Part 10: AI chat sidebar
 
-- [ ] Add a polished, responsive sidebar consistent with the existing color scheme, with message history, input, and a pending state.
-- [ ] Connect it to the authenticated chat API and refresh the board automatically after an AI update; preserve the conversation for the current chat session.
-- [ ] Display errors and conflicts clearly, and keep board and chat usable on smaller screens.
-- [ ] Update concise usage documentation.
+- [x] Add a polished, responsive sidebar consistent with the existing color scheme, with message history, input, and a pending state.
+- [x] Connect it to the authenticated chat API and refresh the board automatically after an AI update; preserve the conversation for the current chat session.
+- [x] Display errors and conflicts clearly, and keep board and chat usable on smaller screens.
+- [x] Update concise usage documentation.
 
 **Tests:** Frontend tests for conversation history, pending/error states, and board refresh; browser tests for an answer without changes and a multi-card AI update using a deterministic mocked provider. Where available, perform a live end-to-end smoke test.
+
+**Results:** Frontend lint passed and all 26 Vitest tests passed. The frontend production export built successfully, and all 12 Playwright tests passed against an isolated container and disposable volume, including answer-only chat, a multi-card update, narrow-screen usability, and existing board drag regressions; chat browser responses were deterministic API mocks. A separate live authenticated `/api/ai/chat` smoke test against the configured model used only the synthetic demo board, returned `2 + 2 = 4`, and left its revision and data unchanged.
 
 **Success:** The user can chat from the sidebar, see responses, and immediately see persisted AI board changes; failures are visible and do not misrepresent success.

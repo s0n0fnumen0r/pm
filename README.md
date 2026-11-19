@@ -15,7 +15,7 @@ The authenticated board API stores its data in `/data/kanban.sqlite3` on the Com
 
 ## AI connectivity
 
-Create a root `.env` file next to `compose.yaml` containing `OPENROUTER_API_KEY=your-key`. Compose passes this variable only to the backend container; do not commit `.env` or put the key in frontend configuration. The configured model is `nvidia/nemotron-3.5-super-vl:free`. After starting the app and signing in, an authenticated same-origin `POST /api/ai/check` sends a fixed `2 + 2` prompt, while `POST /api/ai/chat` sends the current board, conversation history, and your message to OpenRouter. Those requests are processed outside your machine. The API key remains server-side and is not returned to the browser or written to application logs.
+Create a root `.env` file next to `compose.yaml` containing `OPENROUTER_API_KEY=your-key`. Compose passes this variable only to the backend container; do not commit `.env` or put the key in frontend configuration. The configured model is `nvidia/nemotron-3.5-super-vl:free`. After starting the app and signing in, the chat sidebar sends the current board, conversation history, and your message to OpenRouter; those requests are processed outside your machine. The conversation remains in the current page session and is not saved. An authenticated same-origin `POST /api/ai/check` can also send a fixed `2 + 2` prompt to verify connectivity. The API key remains server-side and is not returned to the browser or written to application logs.
 
 ## Backend tests
 
