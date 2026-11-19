@@ -10,7 +10,8 @@ VALID = {"username": "user", "password": "password"}
 
 
 @pytest.fixture
-def client():
+def client(tmp_path, monkeypatch):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path))
     auth.sessions.clear()
     with TestClient(app, base_url=BASE_URL) as test_client:
         yield test_client

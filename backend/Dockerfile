@@ -1,10 +1,11 @@
 FROM node:24-bookworm-slim AS frontend-build
 
-WORKDIR /frontend
+WORKDIR /workspace/frontend
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ ./
+COPY backend/app/initial_board.json /workspace/backend/app/initial_board.json
 RUN npm run build
 
 FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim AS base
@@ -16,7 +17,7 @@ COPY backend/pyproject.toml backend/uv.lock ./
 RUN uv sync --locked --no-dev --no-install-project
 
 COPY backend/app ./app
-COPY --from=frontend-build /frontend/out ./app/static
+COPY --from=frontend-build /workspace/frontend/out ./app/static
 
 FROM base AS test
 RUN uv sync --locked --no-install-project

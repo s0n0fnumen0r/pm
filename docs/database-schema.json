@@ -1,0 +1,84 @@
+{
+  "status": "approved",
+  "schema_version": 1,
+  "database": {
+    "engine": "SQLite",
+    "path": "/data/kanban.sqlite3",
+    "foreign_keys": true,
+    "strict_tables": true
+  },
+  "tables": [
+    {
+      "name": "users",
+      "columns": [
+        { "name": "id", "type": "TEXT", "not_null": true, "check": "length(id) > 0" },
+        { "name": "username", "type": "TEXT", "not_null": true, "check": "length(username) > 0" }
+      ],
+      "primary_key": ["id"],
+      "unique": [["username"]],
+      "foreign_keys": []
+    },
+    {
+      "name": "boards",
+      "columns": [
+        { "name": "id", "type": "TEXT", "not_null": true, "check": "length(id) > 0" },
+        { "name": "user_id", "type": "TEXT", "not_null": true },
+        { "name": "revision", "type": "INTEGER", "not_null": true, "default": 0, "check": "revision >= 0" }
+      ],
+      "primary_key": ["id"],
+      "unique": [["user_id"]],
+      "foreign_keys": [
+        { "columns": ["user_id"], "references": { "table": "users", "columns": ["id"] }, "on_delete": "CASCADE" }
+      ]
+    },
+    {
+      "name": "board_columns",
+      "columns": [
+        { "name": "board_id", "type": "TEXT", "not_null": true },
+        { "name": "id", "type": "TEXT", "not_null": true, "check": "length(id) > 0" },
+        { "name": "title", "type": "TEXT", "not_null": true },
+        { "name": "position", "type": "INTEGER", "not_null": true, "check": "position >= 0 AND position < 5" }
+      ],
+      "primary_key": ["board_id", "id"],
+      "unique": [["board_id", "position"]],
+      "foreign_keys": [
+        { "columns": ["board_id"], "references": { "table": "boards", "columns": ["id"] }, "on_delete": "CASCADE" }
+      ]
+    },
+    {
+      "name": "cards",
+      "columns": [
+        { "name": "board_id", "type": "TEXT", "not_null": true },
+        { "name": "id", "type": "TEXT", "not_null": true, "check": "length(id) > 0" },
+        { "name": "column_id", "type": "TEXT", "not_null": true },
+        { "name": "title", "type": "TEXT", "not_null": true },
+        { "name": "details", "type": "TEXT", "not_null": true },
+        { "name": "position", "type": "INTEGER", "not_null": true, "check": "position >= 0" }
+      ],
+      "primary_key": ["board_id", "id"],
+      "unique": [["board_id", "column_id", "position"]],
+      "foreign_keys": [
+        { "columns": ["board_id", "column_id"], "references": { "table": "board_columns", "columns": ["board_id", "id"] }, "on_delete": "CASCADE" }
+      ]
+    }
+  ],
+  "initial_board": {
+    "columns": [
+      { "id": "col-backlog", "title": "Backlog", "cardIds": ["card-1", "card-2"] },
+      { "id": "col-discovery", "title": "Discovery", "cardIds": ["card-3"] },
+      { "id": "col-progress", "title": "In Progress", "cardIds": ["card-4", "card-5"] },
+      { "id": "col-review", "title": "Review", "cardIds": ["card-6"] },
+      { "id": "col-done", "title": "Done", "cardIds": ["card-7", "card-8"] }
+    ],
+    "cards": {
+      "card-1": { "id": "card-1", "title": "Align roadmap themes", "details": "Draft quarterly themes with impact statements and metrics." },
+      "card-2": { "id": "card-2", "title": "Gather customer signals", "details": "Review support tags, sales notes, and churn feedback." },
+      "card-3": { "id": "card-3", "title": "Prototype analytics view", "details": "Sketch initial dashboard layout and key drill-downs." },
+      "card-4": { "id": "card-4", "title": "Refine status language", "details": "Standardize column labels and tone across the board." },
+      "card-5": { "id": "card-5", "title": "Design card layout", "details": "Add hierarchy and spacing for scanning dense lists." },
+      "card-6": { "id": "card-6", "title": "QA micro-interactions", "details": "Verify hover, focus, and loading states." },
+      "card-7": { "id": "card-7", "title": "Ship marketing page", "details": "Final copy approved and asset pack delivered." },
+      "card-8": { "id": "card-8", "title": "Close onboarding sprint", "details": "Document release notes and share internally." }
+    }
+  }
+}

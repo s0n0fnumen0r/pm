@@ -1,4 +1,9 @@
-import { moveCard, type Column } from "@/lib/kanban";
+import schema from "../../../docs/database-schema.json";
+import { initialData, moveCard, type Column } from "@/lib/kanban";
+
+it("keeps the shared demo data aligned with the approved database seed", () => {
+  expect(initialData).toEqual(schema.initial_board);
+});
 
 describe("moveCard", () => {
   const baseColumns: Column[] = [

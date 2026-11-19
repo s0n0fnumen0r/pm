@@ -4,7 +4,7 @@ This is the existing Kanban demo, statically exported and served by FastAPI in D
 
 ## Overview
 
-This is a Next.js App Router application using React, TypeScript, and Tailwind CSS. After local sign-in, its single page displays a Kanban board with five fixed, renameable columns. The demo supports adding and removing cards and dragging them within or between columns. Board data is held in React state and temporarily saved to the current tab's session storage; there is no card-editing UI, persistent board API, database storage, or AI chat yet.
+This is a Next.js App Router application using React, TypeScript, and Tailwind CSS. After local sign-in, its single page displays a Kanban board with five fixed, renameable columns. The demo supports adding and removing cards and dragging them within or between columns. Board data is held in React state and temporarily saved to the current tab's session storage. The backend has a persistent board API, but the frontend is not connected to it yet; there is no card-editing UI or AI chat.
 
 The rendering and data flow is:
 
@@ -36,14 +36,14 @@ The board data shape separates ordered columns and their `cardIds` from the card
 
 - **`src/lib/kanban.ts`**:
   - `Card` has an ID, title, and details. `Column` has an ID, title, and ordered list of card IDs. `BoardData` contains the ordered columns and a card lookup keyed by ID.
-  - `initialData` supplies the five demo columns—Backlog, Discovery, In Progress, Review, and Done—and eight example cards.
+  - `initialData` imports `backend/app/initial_board.json`, shared with the backend, containing five demo columns—Backlog, Discovery, In Progress, Review, and Done—and eight example cards.
   - `moveCard` resolves the source and target from card or column IDs and returns updated column arrays. It supports reordering over a card and appending to a column, including an empty one; invalid or unchanged moves leave the input unchanged.
   - `createId` combines a prefix, random text, and a timestamp to generate IDs for cards created in the demo.
 - **`src/lib/boardStorage.ts`**: Reads and validates the current tab's session-storage board and saves updates. Invalid or unavailable storage is reported without overwriting the saved data. This temporary single-user approach does not replace the planned database.
 
 ## Tests
 
-- **`src/lib/kanban.test.ts`**: Vitest tests for reordering, moving between columns, dropping into empty or existing columns, and invalid moves.
+- **`src/lib/kanban.test.ts`**: Vitest tests for demo seed consistency with the approved database schema, reordering, moving between columns, dropping into empty or existing columns, and invalid moves.
 - **`src/components/KanbanBoard.test.tsx`**: Testing Library tests for rendering five columns, renaming a column, adding and removing a card, and validating and cancelling the add-card form.
 - **`src/test/setup.ts`**: Loads `@testing-library/jest-dom` matchers for unit tests.
 - **`src/test/vitest.d.ts`**: Adds Vitest and jest-dom type references for test files.
@@ -57,7 +57,7 @@ The board data shape separates ordered columns and their `cardIds` from the card
 
 - **`package.json`**: Declares the npm scripts and dependencies. Runtime dependencies include Next.js, React, dnd-kit, and `clsx`; development dependencies include TypeScript, Tailwind/PostCSS, ESLint, Vitest/Testing Library, and Playwright.
 - **`package-lock.json`**: npm's locked dependency tree for reproducible installs; keep it synchronized with `package.json`.
-- **`next.config.ts`**: Enables the static export written to `out/`. Docker copies that export into the FastAPI image.
+- **`next.config.ts`**: Enables the static export written to `out/` and sets the Turbopack root to the project root so the shared backend seed can be imported. Docker copies that export into the FastAPI image.
 - **`tsconfig.json`**: Enables strict TypeScript checking, Next.js types, and the `@/*` alias to `src/*`; TypeScript does not emit application files.
 - **`eslint.config.mjs`**: Uses the Next.js core-web-vitals and TypeScript rule sets and ignores generated build paths.
 - **`postcss.config.mjs`**: Enables the Tailwind CSS PostCSS plugin.

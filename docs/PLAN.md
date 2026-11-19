@@ -4,9 +4,9 @@
 
 - One local Docker container serves the static Next.js frontend and FastAPI API. The MVP login is `user` / `password`; the data model supports multiple users and one board per user.
 - New users receive the existing demo board, including its five columns and cards. Existing boards are never re-seeded on restart.
-- The current demo supports login, renaming columns, adding and removing cards, and drag-and-drop; editing existing cards, durable persistence, and AI chat still need to be added.
+- The current demo supports login, renaming columns, adding and removing cards, and drag-and-drop; editing existing cards, connecting the frontend to durable persistence, and AI chat still need to be added.
 - Until database integration, board changes are temporarily kept in the current browser tab's session storage across refresh and sign-out; they are not shared or durable.
-- Recommendation for Part 5: use SQLite tables for users, boards, columns, and cards, including explicit ordering and ownership. Document the proposed schema as JSON and exchange boards as JSON through the API. This is a recommendation, not an approved schema; obtain separate sign-off in Part 5.
+- The Part 5 schema was approved: use SQLite tables for users, boards, columns, and cards, including explicit ordering and ownership, and exchange boards as JSON through the API.
 - Keep the OpenRouter key server-side. The configured model is `nvidia/nemotron-3-ultra-550b-a55b:free`; verify its availability and Structured Outputs support rather than assuming either.
 - Preserve the existing visual style and the color scheme in the project instructions. Keep the README concise.
 
@@ -61,23 +61,27 @@
 
 ## Part 5: Database modeling
 
-- [ ] Propose a JSON schema document for users, one board per user, fixed renameable columns, cards, and their ordering; include ownership, identifiers, constraints, and initial demo data.
-- [ ] Document the SQLite representation, initialization, persistence, and how the API's board JSON maps to it. Explain the recommendation and alternatives without implementing the schema yet.
-- [ ] Review how updates avoid losing concurrent board changes, including AI updates.
-- [ ] Obtain explicit user sign-off on the schema and database approach before Part 6.
+- [x] Propose a JSON schema document for users, one board per user, fixed renameable columns, cards, and their ordering; include ownership, identifiers, constraints, and initial demo data.
+- [x] Document the SQLite representation, initialization, persistence, and how the API's board JSON maps to it. Explain the recommendation and alternatives without implementing the schema yet.
+- [x] Review how updates avoid losing concurrent board changes, including AI updates.
+- [x] Obtain explicit user sign-off on the schema and database approach before Part 6.
 
 **Validation:** Check the proposal against the current board data shape and every required create, edit, move, rename, delete, ordering, and per-user access operation.
+
+**Results:** The proposed seed matches the current frontend demo exactly. An in-memory SQLite exercise of the proposed table definitions covered user isolation, constraint rejection, create/edit/move/delete/rename/order, a revision precondition, cascading deletion, and rollback. This validates the proposal, not an implemented API or real concurrent requests.
 
 **Success:** The schema and database approach are documented in `docs/` and approved by the user.
 
 ## Part 6: Backend
 
-- [ ] Implement the approved schema and automatic SQLite initialization. Use persistent container storage and create the demo board only when a user first needs a board.
-- [ ] Add authenticated API routes to read and update the signed-in user's board, including card creation, editing, movement, deletion, column renaming, and ordering. Enforce the fixed-column and one-board-per-user rules.
-- [ ] Validate input and ownership, return clear errors, and make related changes atomic. Define a revision/conflict mechanism so stale updates do not silently overwrite newer data.
-- [ ] Document the API, database location, and initialization behavior.
+- [x] Implement the approved schema and automatic SQLite initialization. Use persistent container storage and create the demo board only when a user first needs a board.
+- [x] Add authenticated API routes to read and update the signed-in user's board, including card creation, editing, movement, deletion, column renaming, and ordering. Enforce the fixed-column and one-board-per-user rules.
+- [x] Validate input and ownership, return clear errors, and make related changes atomic. Define a revision/conflict mechanism so stale updates do not silently overwrite newer data.
+- [x] Document the API, database location, and initialization behavior.
 
 **Tests:** Backend unit and API integration tests with isolated temporary databases: first initialization, demo seeding, no reseeding, each operation and ordering, invalid input, unauthorized access, user isolation, transaction rollback, and stale-update conflicts. Verify persistence across a container restart.
+
+**Results:** All 26 backend tests passed in Docker, including concurrent writes and transaction rollback. The shared demo seed matches the approved schema; frontend lint and 13 unit tests passed. A board update survived a real container restart and reauthentication using an isolated volume. The updated app is running and all 14 Edge browser regression tests passed. The frontend remains on tab storage until Part 7.
 
 **Success:** The authenticated API can read and modify the correct board safely, and data survives restarts.
 
