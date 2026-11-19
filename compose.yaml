@@ -10,6 +10,7 @@ services:
       - "127.0.0.1:8765:8000"
     environment:
       DATA_DIR: /data
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
     volumes:
       - board-data:/data
 

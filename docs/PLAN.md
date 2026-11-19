@@ -105,11 +105,13 @@
 
 ## Part 8: AI connectivity
 
-- [ ] Add a server-side OpenRouter client using the configured model and the root `.env` key, without exposing the key to the browser or logs.
-- [ ] Implement a simple `2+2` connectivity check and surface configuration, network, provider, and model errors clearly.
-- [ ] Document configuration and the fact that requests send data to OpenRouter.
+- [x] Add a server-side OpenRouter client using the configured model and the root `.env` key, without exposing the key to the browser or logs.
+- [x] Implement an authenticated, same-origin `POST /api/ai/check` connectivity check and surface configuration, network, provider, and model errors clearly.
+- [x] Document configuration and the fact that requests send data to OpenRouter.
 
 **Tests:** Mock provider responses and failures in automated backend tests. Run a separately identified live `2+2` check when a key and network access are available; report failures or unavailable access rather than treating a mock as proof of connectivity.
+
+**Results:** The Docker test stage passed all 34 backend tests and built the frontend production export. Mocked tests cover authentication and origin checks, key configuration, successful response shape, network failure, provider authentication/rate-limit errors, unavailable model, and unexpected model output. A separate live check using the root `.env` key returned `4` from `nvidia/nemotron-3-ultra-550b-a55b:free`; the key was not printed, returned, or logged.
 
 **Success:** The live configured-model check returns a correct answer, or a specific external blocker is reported; automated tests require no live credentials.
 

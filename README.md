@@ -11,7 +11,11 @@ Open http://127.0.0.1:8765 and sign in with `user` / `password`. Board changes s
 
 This fixed-credential login is for local development only, not production. Sessions expire after eight hours or a server restart. The server accepts requests for `127.0.0.1` and `localhost` only.
 
-The authenticated board API stores its data in `/data/kanban.sqlite3` on the Compose-managed `board-data` volume; stopping or restarting the app retains it. If this tab has an older tab-only board, you can import it when the database board is still untouched. The old tab data is not deleted. See [the database approach](docs/database-approach.md) for the API and conflict handling. The root `.env` is not included in the Docker build or passed to the container at this stage.
+The authenticated board API stores its data in `/data/kanban.sqlite3` on the Compose-managed `board-data` volume; stopping or restarting the app retains it. If this tab has an older tab-only board, you can import it when the database board is still untouched. The old tab data is not deleted. See [the database approach](docs/database-approach.md) for the API and conflict handling.
+
+## AI connectivity
+
+Create a root `.env` file next to `compose.yaml` containing `OPENROUTER_API_KEY=your-key`. Compose passes this variable only to the backend container; do not commit `.env` or put the key in frontend configuration. After starting the app and signing in, an authenticated same-origin `POST /api/ai/check` sends a fixed `2 + 2` prompt to the configured OpenRouter model. OpenRouter receives that prompt and processes it outside your machine. The API key remains server-side and is not returned to the browser or written to application logs.
 
 ## Backend tests
 
