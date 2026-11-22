@@ -2,16 +2,32 @@ import re
 
 from fastapi.testclient import TestClient
 
-from app.main import app
+from app.main import MAX_BODY_BYTES, app
 
 client = TestClient(app, base_url="http://127.0.0.1:8765")
 
 
-def test_hello_api():
-    response = client.get("/api/hello")
+def test_health_api():
+    response = client.get("/api/health")
 
     assert response.status_code == 200
-    assert response.json() == {"message": "Hello from the API!"}
+    assert response.json() == {"status": "ok"}
+
+
+def test_security_headers_are_set():
+    response = client.get("/api/health")
+
+    assert response.headers["content-security-policy"] == "frame-ancestors 'none'"
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["referrer-policy"] == "same-origin"
+
+
+def test_oversized_request_bodies_are_rejected():
+    declared = client.post("/api/login", content=b"x" * (MAX_BODY_BYTES + 1))
+    assert declared.status_code == 413
+
+    chunked = client.post("/api/login", content=iter([b"x" * MAX_BODY_BYTES, b"x"]))
+    assert chunked.status_code == 413
 
 
 def test_root_serves_exported_sign_in_and_static_asset():

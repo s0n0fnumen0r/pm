@@ -7,7 +7,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import auth
-from app.board import INITIAL_BOARD
+from app.board import (
+    INITIAL_BOARD,
+    MAX_CARD_DETAILS_LENGTH,
+    MAX_CARD_TITLE_LENGTH,
+    MAX_CARDS,
+    MAX_COLUMN_TITLE_LENGTH,
+)
 from app.database import connection, database_path, initialize_database
 from app.main import app
 
@@ -40,6 +46,38 @@ def collide_with_column_id(board):
     board["columns"][0]["cardIds"][0] = "col-backlog"
 
 
+def add_cards_over_the_limit(board):
+    for index in range(MAX_CARDS + 1 - len(board["cards"])):
+        card_id = f"extra-{index}"
+        board["cards"][card_id] = {"id": card_id, "title": "Extra", "details": ""}
+        board["columns"][0]["cardIds"].append(card_id)
+
+
+def test_boards_at_the_size_limits_are_accepted(client):
+    sign_in(client)
+    board = client.get("/api/board").json()["board"]
+    board["columns"][0]["title"] = "x" * MAX_COLUMN_TITLE_LENGTH
+    board["cards"]["card-1"].update(
+        title="x" * MAX_CARD_TITLE_LENGTH, details="x" * MAX_CARD_DETAILS_LENGTH
+    )
+    for index in range(MAX_CARDS - len(board["cards"])):
+        card_id = f"extra-{index}"
+        board["cards"][card_id] = {"id": card_id, "title": "Extra", "details": ""}
+        board["columns"][0]["cardIds"].append(card_id)
+    assert len(board["cards"]) == MAX_CARDS
+    response = client.put("/api/board", json={"revision": 0, "board": board}, headers=ORIGIN)
+    assert response.status_code == 200
+    assert client.get("/api/board").json() == response.json()
+
+
+def test_blank_column_titles_in_older_data_fall_back_to_the_default(client):
+    sign_in(client)
+    client.get("/api/board")
+    with connection() as db:
+        db.execute("UPDATE board_columns SET title = '  ' WHERE id = 'col-backlog'")
+    assert client.get("/api/board").json() == {"revision": 0, "board": INITIAL_BOARD}
+
+
 def test_authentication_and_origin_are_required(client):
     assert client.get("/api/board").status_code == 401
     assert client.put("/api/board", json={"revision": 0, "board": INITIAL_BOARD}, headers=ORIGIN).status_code == 401
@@ -60,7 +98,7 @@ def test_board_operations_persist_and_empty_board_is_not_reseeded(client):
     assert response.json() == {"revision": 0, "board": INITIAL_BOARD}
     board = copy.deepcopy(response.json()["board"])
     columns = board["columns"]
-    columns[0]["title"] = ""
+    columns[0]["title"] = "Renamed"
     columns[0]["cardIds"] = ["card-2"]
     columns[1]["cardIds"] = ["new-card", "card-3", "card-1"]
     board["cards"]["card-1"].update(title="Edited", details="Updated details")
@@ -96,6 +134,12 @@ def test_board_operations_persist_and_empty_board_is_not_reseeded(client):
         lambda board: board["columns"][0]["cardIds"].remove("card-1"),
         lambda board: board["cards"]["card-1"].update(id="different"),
         lambda board: board["cards"]["card-1"].update(title="  "),
+        lambda board: board["columns"][0].update(title="  "),
+        lambda board: board["columns"][0].update(title=""),
+        lambda board: board["columns"][0].update(title="x" * (MAX_COLUMN_TITLE_LENGTH + 1)),
+        lambda board: board["cards"]["card-1"].update(title="x" * (MAX_CARD_TITLE_LENGTH + 1)),
+        lambda board: board["cards"]["card-1"].update(details="x" * (MAX_CARD_DETAILS_LENGTH + 1)),
+        add_cards_over_the_limit,
         collide_with_column_id,
         lambda board: board["cards"]["card-1"].update(unexpected="field"),
     ],

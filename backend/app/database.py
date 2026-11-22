@@ -67,6 +67,8 @@ def transaction(db: sqlite3.Connection, *, write: bool = False) -> Iterator[None
 
 def initialize_database() -> None:
     database_path().parent.mkdir(parents=True, exist_ok=True)
+    with connection() as db:
+        db.execute("PRAGMA journal_mode = WAL")  # persists in the database file
     with connection() as db, transaction(db, write=True):
         version = db.execute("PRAGMA user_version").fetchone()[0]
         if version == 0:

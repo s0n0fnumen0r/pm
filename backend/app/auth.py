@@ -69,7 +69,7 @@ def session(response: Response, username: str = Depends(require_user)) -> dict[s
     return {"username": username}
 
 
-@router.post("/logout", dependencies=[Depends(require_same_origin), Depends(require_user)])
+@router.post("/logout", dependencies=[Depends(require_same_origin)])
 def logout(request: Request, response: Response) -> dict[str, str]:
     token = request.cookies.get(SESSION_COOKIE)
     if token:

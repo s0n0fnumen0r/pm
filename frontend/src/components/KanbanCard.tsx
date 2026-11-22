@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
-import type { Card } from "@/lib/kanban";
+import { MAX_CARD_DETAILS_LENGTH, MAX_CARD_TITLE_LENGTH, type Card } from "@/lib/kanban";
 
 type KanbanCardProps = {
   card: Card;
@@ -54,6 +54,7 @@ export const KanbanCard = ({ card, onDelete, onEdit, onEditingChange }: KanbanCa
             Card title
             <input
               aria-label="Edit card title"
+              maxLength={MAX_CARD_TITLE_LENGTH}
               value={title}
               onChange={(event) => {
                 setTitle(event.target.value);
@@ -68,6 +69,7 @@ export const KanbanCard = ({ card, onDelete, onEdit, onEditingChange }: KanbanCa
             Details
             <textarea
               aria-label="Edit card details"
+              maxLength={MAX_CARD_DETAILS_LENGTH}
               value={details}
               onChange={(event) => setDetails(event.target.value)}
               rows={3}
@@ -92,7 +94,7 @@ export const KanbanCard = ({ card, onDelete, onEdit, onEditingChange }: KanbanCa
             {card.title}
           </h4>
           <p className="mt-2 text-sm leading-6 text-[var(--gray-text)]">
-            {card.details}
+            {card.details || "No details yet."}
           </p>
         </div>
         <div className="flex flex-col" onPointerDown={(event) => event.stopPropagation()}>

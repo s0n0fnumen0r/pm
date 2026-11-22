@@ -75,10 +75,7 @@ export const AuthGate = () => {
     setError("");
     try {
       const response = await fetch("/api/logout", { method: "POST" });
-      if (response.status === 401) {
-        setError("Your session has expired. Please sign in again.");
-        setView("signed-out");
-      } else if (response.ok) {
+      if (response.ok) {
         setUsername("");
         setPassword("");
         setView("signed-out");

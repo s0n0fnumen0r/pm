@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import {
   DndContext,
   DragOverlay,
+  KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
@@ -13,10 +14,11 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
+import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { AIChatSidebar } from "@/components/AIChatSidebar";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
-import { createId, moveCard } from "@/lib/kanban";
+import { MAX_CARDS, createId, moveCard } from "@/lib/kanban";
 import { useBoard } from "@/lib/useBoard";
 
 const collisionDetection: CollisionDetection = (args) => {
@@ -55,7 +57,8 @@ export const KanbanBoard = ({ onLogout, onSessionExpired, loggingOut, logoutErro
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 6 },
-    })
+    }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -91,7 +94,7 @@ export const KanbanBoard = ({ onLogout, onSessionExpired, loggingOut, logoutErro
       ...prev,
       cards: {
         ...prev.cards,
-        [id]: { id, title, details: details || "No details yet." },
+        [id]: { id, title, details },
       },
       columns: prev.columns.map((column) =>
         column.id === columnId
@@ -286,6 +289,7 @@ export const KanbanBoard = ({ onLogout, onSessionExpired, loggingOut, logoutErro
                     key={column.id}
                     column={column}
                     cards={column.cardIds.map((cardId) => board.cards[cardId])}
+                    atCardLimit={Object.keys(board.cards).length >= MAX_CARDS}
                     onRename={handleRenameColumn}
                     onAddCard={handleAddCard}
                     onDeleteCard={handleDeleteCard}

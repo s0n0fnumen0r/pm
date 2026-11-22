@@ -1,12 +1,14 @@
 import { useState, type FormEvent } from "react";
+import { MAX_CARD_DETAILS_LENGTH, MAX_CARD_TITLE_LENGTH, MAX_CARDS } from "@/lib/kanban";
 
 const initialFormState = { title: "", details: "" };
 
 type NewCardFormProps = {
   onAdd: (title: string, details: string) => void;
+  atLimit: boolean;
 };
 
-export const NewCardForm = ({ onAdd }: NewCardFormProps) => {
+export const NewCardForm = ({ onAdd, atLimit }: NewCardFormProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [formState, setFormState] = useState(initialFormState);
 
@@ -30,6 +32,7 @@ export const NewCardForm = ({ onAdd }: NewCardFormProps) => {
               setFormState((prev) => ({ ...prev, title: event.target.value }))
             }
             placeholder="Card title"
+            maxLength={MAX_CARD_TITLE_LENGTH}
             className="w-full rounded-xl border border-[var(--stroke)] bg-white px-3 py-2 text-sm font-medium text-[var(--navy-dark)] outline-none transition focus:border-[var(--primary-blue)]"
             required
           />
@@ -39,6 +42,7 @@ export const NewCardForm = ({ onAdd }: NewCardFormProps) => {
               setFormState((prev) => ({ ...prev, details: event.target.value }))
             }
             placeholder="Details"
+            maxLength={MAX_CARD_DETAILS_LENGTH}
             rows={3}
             className="w-full resize-none rounded-xl border border-[var(--stroke)] bg-white px-3 py-2 text-sm text-[var(--gray-text)] outline-none transition focus:border-[var(--primary-blue)]"
           />
@@ -65,7 +69,9 @@ export const NewCardForm = ({ onAdd }: NewCardFormProps) => {
         <button
           type="button"
           onClick={() => setIsOpen(true)}
-          className="w-full rounded-full border border-dashed border-[var(--stroke)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--primary-blue)] transition hover:border-[var(--primary-blue)]"
+          disabled={atLimit}
+          title={atLimit ? `The board is limited to ${MAX_CARDS} cards` : undefined}
+          className="w-full rounded-full border border-dashed border-[var(--stroke)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--primary-blue)] transition hover:border-[var(--primary-blue)] disabled:opacity-50"
         >
           Add a card
         </button>

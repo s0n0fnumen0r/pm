@@ -19,6 +19,12 @@ export type BoardData = {
 
 export const initialData: BoardData = initialBoard;
 
+// Keep in sync with the limits in backend/app/board.py.
+export const MAX_CARD_TITLE_LENGTH = 200;
+export const MAX_CARD_DETAILS_LENGTH = 5000;
+export const MAX_COLUMN_TITLE_LENGTH = 100;
+export const MAX_CARDS = 500;
+
 const isColumnId = (columns: Column[], id: string) =>
   columns.some((column) => column.id === id);
 

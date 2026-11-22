@@ -15,30 +15,39 @@ INITIAL_BOARD = json.loads((Path(__file__).parent / "initial_board.json").read_t
 COLUMN_IDS = tuple(column["id"] for column in INITIAL_BOARD["columns"])
 
 
+MAX_ID_LENGTH = 64
+MAX_CARD_TITLE_LENGTH = 200
+MAX_CARD_DETAILS_LENGTH = 5000
+MAX_COLUMN_TITLE_LENGTH = 100
+MAX_CARDS = 500
+
+
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
 
 class Card(StrictModel):
-    id: str
-    title: str
-    details: str
+    id: str = Field(max_length=MAX_ID_LENGTH)
+    title: str = Field(max_length=MAX_CARD_TITLE_LENGTH)
+    details: str = Field(max_length=MAX_CARD_DETAILS_LENGTH)
 
 
 class Column(StrictModel):
-    id: str
-    title: str
-    cardIds: list[str]
+    id: str = Field(max_length=MAX_ID_LENGTH)
+    title: str = Field(max_length=MAX_COLUMN_TITLE_LENGTH)
+    cardIds: list[str] = Field(max_length=MAX_CARDS)
 
 
 class Board(StrictModel):
     columns: list[Column]
-    cards: dict[str, Card]
+    cards: dict[str, Card] = Field(max_length=MAX_CARDS)
 
     @model_validator(mode="after")
     def validate_board(self) -> Self:
         if tuple(column.id for column in self.columns) != COLUMN_IDS:
             raise ValueError("The fixed columns and their order cannot be changed")
+        if any(not column.title.strip() for column in self.columns):
+            raise ValueError("Column titles must not be blank")
         for card_id, card in self.cards.items():
             if not card_id or card_id != card.id or card_id in COLUMN_IDS:
                 raise ValueError("Card IDs must be non-empty, match their keys, and differ from column IDs")
@@ -89,10 +98,31 @@ def get_or_create_board(db: sqlite3.Connection, username: str) -> str:
     return board_id
 
 
+def find_board_id(db: sqlite3.Connection, username: str) -> str | None:
+    row = db.execute(
+        "SELECT boards.id FROM boards JOIN users ON users.id = boards.user_id WHERE users.username = ?",
+        (username,),
+    ).fetchone()
+    return row["id"] if row else None
+
+
+def load_board(username: str) -> BoardResponse:
+    """Read the user's board, taking the write lock only when it has to be created."""
+    with connection() as db:
+        with transaction(db):
+            board_id = find_board_id(db, username)
+            if board_id is not None:
+                return read_board(db, board_id)
+        with transaction(db, write=True):
+            return read_board(db, get_or_create_board(db, username))
+
+
 def read_board(db: sqlite3.Connection, board_id: str) -> BoardResponse:
     revision = db.execute("SELECT revision FROM boards WHERE id = ?", (board_id,)).fetchone()["revision"]
+    seed_titles = {column["id"]: column["title"] for column in INITIAL_BOARD["columns"]}
     columns = [
-        Column(id=row["id"], title=row["title"], cardIds=[])
+        # Boards saved before blank column titles were rejected fall back to the default title.
+        Column(id=row["id"], title=row["title"] if row["title"].strip() else seed_titles[row["id"]], cardIds=[])
         for row in db.execute(
             "SELECT id, title FROM board_columns WHERE board_id = ? ORDER BY position", (board_id,)
         )
@@ -110,8 +140,7 @@ def read_board(db: sqlite3.Connection, board_id: str) -> BoardResponse:
 @router.get("/board", response_model=BoardResponse)
 def get_board(response: Response, username: str = Depends(require_user)) -> BoardResponse:
     response.headers["Cache-Control"] = "no-store"
-    with connection() as db, transaction(db, write=True):
-        return read_board(db, get_or_create_board(db, username))
+    return load_board(username)
 
 
 @router.put("/board", response_model=BoardResponse, dependencies=[Depends(require_same_origin)])

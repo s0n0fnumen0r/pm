@@ -1,13 +1,15 @@
+import { useState } from "react";
 import clsx from "clsx";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import type { Card, Column } from "@/lib/kanban";
+import { MAX_COLUMN_TITLE_LENGTH, type Card, type Column } from "@/lib/kanban";
 import { KanbanCard } from "@/components/KanbanCard";
 import { NewCardForm } from "@/components/NewCardForm";
 
 type KanbanColumnProps = {
   column: Column;
   cards: Card[];
+  atCardLimit: boolean;
   onRename: (columnId: string, title: string) => void;
   onAddCard: (columnId: string, title: string, details: string) => void;
   onDeleteCard: (columnId: string, cardId: string) => void;
@@ -18,6 +20,7 @@ type KanbanColumnProps = {
 export const KanbanColumn = ({
   column,
   cards,
+  atCardLimit,
   onRename,
   onAddCard,
   onDeleteCard,
@@ -25,6 +28,20 @@ export const KanbanColumn = ({
   onEditingChange,
 }: KanbanColumnProps) => {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
+  const [draft, setDraft] = useState(column.title);
+  const [savedTitle, setSavedTitle] = useState(column.title);
+  if (column.title !== savedTitle) {
+    setSavedTitle(column.title);
+    setDraft(column.title);
+  }
+
+  // Rename once editing ends; a blank title reverts to the current one.
+  const commitTitle = () => {
+    const title = draft.trim();
+    if (!title) setDraft(column.title);
+    else if (title !== column.title) onRename(column.id, title);
+    else setDraft(title);
+  };
 
   return (
     <section
@@ -44,8 +61,14 @@ export const KanbanColumn = ({
             </span>
           </div>
           <input
-            value={column.title}
-            onChange={(event) => onRename(column.id, event.target.value)}
+            value={draft}
+            maxLength={MAX_COLUMN_TITLE_LENGTH}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={commitTitle}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") event.currentTarget.blur();
+              if (event.key === "Escape") setDraft(column.title);
+            }}
             className="mt-3 w-full bg-transparent font-display text-lg font-semibold text-[var(--navy-dark)] outline-none"
             aria-label="Column title"
           />
@@ -70,6 +93,7 @@ export const KanbanColumn = ({
         )}
       </div>
       <NewCardForm
+        atLimit={atCardLimit}
         onAdd={(title, details) => onAddCard(column.id, title, details)}
       />
     </section>

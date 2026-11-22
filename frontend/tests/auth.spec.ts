@@ -48,7 +48,7 @@ test("shows failures and permits retrying the session check and login", async ({
   await expect(page.getByTestId("column-col-backlog")).toBeVisible();
 });
 
-test("keeps the board visible on sign-out failure and reports an expired session", async ({ page, context }) => {
+test("keeps the board visible on sign-out failure and signs out an expired session", async ({ page, context }) => {
   await page.goto("/");
   await page.getByLabel("Username").fill("user");
   await page.getByLabel("Password").fill("password");
@@ -63,7 +63,7 @@ test("keeps the board visible on sign-out failure and reports an expired session
   await page.unroute("**/api/logout");
   await context.clearCookies();
   await page.getByRole("button", { name: "Sign out" }).click();
-  await expect(page.getByRole("main").getByRole("alert")).toHaveText("Your session has expired. Please sign in again.");
+  await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
   await expect(page.getByTestId("column-col-backlog")).toHaveCount(0);
 });
 
@@ -86,6 +86,7 @@ test("keeps board changes through refresh, sign-out, and a new tab", async ({ pa
   const backlog = page.getByTestId("column-col-backlog");
   const review = page.getByTestId("column-col-review");
   await backlog.getByLabel("Column title").fill("Ideas");
+  await backlog.getByLabel("Column title").press("Enter");
   await backlog.getByRole("button", { name: "Add a card" }).click();
   await backlog.getByPlaceholder("Card title").fill("Remember this");
   await backlog.getByPlaceholder("Details").fill("Tab-specific notes");

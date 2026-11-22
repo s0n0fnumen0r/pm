@@ -36,6 +36,15 @@ def test_login_session_and_logout_invalidate_token(client):
     assert client.get("/api/session", headers={"Cookie": f"kanban_session={token}"}).status_code == 401
 
 
+def test_logout_clears_the_cookie_even_when_the_session_has_expired(client):
+    assert client.post("/api/login", json=VALID, headers=ORIGIN).status_code == 200
+    auth.sessions.clear()
+    response = client.post("/api/logout", headers=ORIGIN)
+    assert response.status_code == 200
+    assert "kanban_session=" in response.headers["set-cookie"]
+    assert client.cookies.get(auth.SESSION_COOKIE) is None
+
+
 def test_cross_origin_posts_cannot_log_in_or_out(client):
     assert client.post("/api/login", json=VALID).status_code == 403
     assert client.post("/api/login", json=VALID, headers={"Origin": "http://evil.example"}).status_code == 403
