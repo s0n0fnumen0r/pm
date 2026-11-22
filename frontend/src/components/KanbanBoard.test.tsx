@@ -2,7 +2,13 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import userEvent from "@testing-library/user-event";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import { BOARD_STORAGE_KEY } from "@/lib/boardStorage";
-import { initialData, type BoardData } from "@/lib/kanban";
+import {
+  MAX_CARD_DETAILS_LENGTH,
+  MAX_CARD_TITLE_LENGTH,
+  MAX_COLUMN_TITLE_LENGTH,
+  initialData,
+  type BoardData,
+} from "@/lib/kanban";
 
 let serverBoard: BoardData;
 let revision: number;
@@ -17,6 +23,11 @@ const renderBoard = () => render(
 );
 const firstColumn = async () => screen.findByTestId("column-col-backlog");
 const saved = () => screen.findByText("All changes saved.");
+// Column titles are committed when the input loses focus.
+const rename = (input: HTMLElement, value: string) => {
+  fireEvent.change(input, { target: { value } });
+  fireEvent.blur(input);
+};
 
 beforeEach(() => {
   sessionStorage.clear();
@@ -49,7 +60,7 @@ it("loads and persists rename, card creation, editing, and deletion", async () =
   renderBoard();
   const column = await firstColumn();
   expect(screen.getAllByTestId(/column-/i)).toHaveLength(5);
-  fireEvent.change(within(column).getByLabelText("Column title"), { target: { value: "Ideas" } });
+  rename(within(column).getByLabelText("Column title"), "Ideas");
   await saved();
   expect(serverBoard.columns[0].title).toBe("Ideas");
 
@@ -96,8 +107,8 @@ it("serializes rapid edits and saves the latest board with the confirmed revisio
   };
   renderBoard();
   const input = within(await firstColumn()).getByLabelText("Column title");
-  fireEvent.change(input, { target: { value: "First" } });
-  fireEvent.change(input, { target: { value: "Final" } });
+  rename(input, "First");
+  rename(input, "Final");
   expect(screen.getByText("Saving changes...")).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Sign out" })).toBeDisabled();
   expect(firstUpdate?.board.columns[0].title).toBe("First");
@@ -105,6 +116,46 @@ it("serializes rapid edits and saves the latest board with the confirmed revisio
   await saved();
   expect(serverBoard.columns[0].title).toBe("Final");
   expect(revision).toBe(2);
+});
+
+it("commits a column rename only on blur or Enter and ignores blank titles", async () => {
+  renderBoard();
+  const input = within(await firstColumn()).getByLabelText("Column title");
+  fireEvent.change(input, { target: { value: "Dra" } });
+  fireEvent.change(input, { target: { value: "Draft" } });
+  expect(serverBoard.columns[0].title).toBe("Backlog");
+  expect(vi.mocked(fetch)).not.toHaveBeenCalledWith("/api/board", expect.objectContaining({ method: "PUT" }));
+  await userEvent.type(input, "{Enter}");
+  await saved();
+  expect(serverBoard.columns[0].title).toBe("Draft");
+  expect(revision).toBe(1);
+
+  rename(input, "   ");
+  expect(input).toHaveValue("Draft");
+  fireEvent.change(input, { target: { value: "Ignored" } });
+  fireEvent.keyDown(input, { key: "Escape" });
+  expect(input).toHaveValue("Draft");
+  expect(revision).toBe(1);
+});
+
+it("limits input lengths", async () => {
+  renderBoard();
+  const column = await firstColumn();
+  expect(within(column).getByLabelText("Column title")).toHaveAttribute("maxLength", String(MAX_COLUMN_TITLE_LENGTH));
+  await userEvent.click(within(column).getByRole("button", { name: "Add a card" }));
+  expect(within(column).getByPlaceholderText("Card title")).toHaveAttribute("maxLength", String(MAX_CARD_TITLE_LENGTH));
+  expect(within(column).getByPlaceholderText("Details")).toHaveAttribute("maxLength", String(MAX_CARD_DETAILS_LENGTH));
+});
+
+it("shows a placeholder for empty details without saving it", async () => {
+  renderBoard();
+  const column = await firstColumn();
+  await userEvent.click(within(column).getByRole("button", { name: "Add a card" }));
+  await userEvent.type(within(column).getByPlaceholderText("Card title"), "No notes");
+  await userEvent.click(within(column).getByRole("button", { name: /^Add card$/ }));
+  await saved();
+  expect(within(column).getByText("No details yet.")).toBeInTheDocument();
+  expect(Object.values(serverBoard.cards).find((card) => card.title === "No notes")?.details).toBe("");
 });
 
 it("rejects a blank new card and clears the cancelled form", async () => {
@@ -123,7 +174,7 @@ it("keeps failed edits visible and retries without claiming they were saved", as
   putOverride = async () => json({ detail: "unavailable" }, 503);
   renderBoard();
   const input = within(await firstColumn()).getByLabelText("Column title");
-  fireEvent.change(input, { target: { value: "Unsaved" } });
+  rename(input, "Unsaved");
   expect(await screen.findByRole("alert")).toHaveTextContent("Your changes are not saved");
   expect(input).toHaveValue("Unsaved");
   expect(screen.getByRole("button", { name: "Sign out" })).toBeDisabled();
@@ -147,7 +198,7 @@ it("does not overwrite a newer board on conflict", async () => {
   };
   renderBoard();
   const input = within(await firstColumn()).getByLabelText("Column title");
-  fireEvent.change(input, { target: { value: "Local edit" } });
+  rename(input, "Local edit");
   expect(await screen.findByRole("alert")).toHaveTextContent("changed elsewhere");
   expect(input).toHaveValue("Local edit");
   await userEvent.click(screen.getByRole("button", { name: "Load latest board" }));
@@ -160,7 +211,7 @@ it("retains unsaved edits through session expiration and retries after sign-in",
   putOverride = async () => json({ detail: "expired" }, 401);
   renderBoard();
   const input = within(await firstColumn()).getByLabelText("Column title");
-  fireEvent.change(input, { target: { value: "Keep this" } });
+  rename(input, "Keep this");
   expect(await screen.findByRole("alert")).toHaveTextContent("session expired");
   expect(input).toHaveValue("Keep this");
   putOverride = undefined;

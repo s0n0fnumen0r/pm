@@ -1,4 +1,3 @@
-import copy
 import json
 from io import BytesIO
 from urllib.error import HTTPError, URLError
@@ -172,7 +171,7 @@ def test_chat_returns_answer_and_current_board_without_an_update(client, monkeyp
         captured["body"] = json.loads(request.data)
         captured["authorization"] = request.get_header("Authorization")
         captured["timeout"] = timeout
-        return provider_result({"response": "What task should I move?", "board_update": None})
+        return provider_result({"response": "What task should I move?", "operations": []})
 
     monkeypatch.setattr(ai, "urlopen", fake_urlopen)
     response = client.post(
@@ -212,70 +211,116 @@ def test_chat_returns_answer_and_current_board_without_an_update(client, monkeyp
     assert API_KEY not in response.text
 
 
-def test_chat_applies_valid_multi_card_update_atomically(client, monkeypatch):
+def operation(action, **fields):
+    return {
+        "action": action,
+        "card_id": None,
+        "column_id": None,
+        "title": None,
+        "details": None,
+        "position": None,
+        **fields,
+    }
+
+
+def test_chat_applies_create_update_and_move_operations_atomically(client, monkeypatch):
     logged_in_client(client)
     monkeypatch.setenv("OPENROUTER_API_KEY", API_KEY)
-    updated = copy.deepcopy(INITIAL_BOARD)
-    updated["columns"][0]["cardIds"].remove("card-1")
-    updated["columns"][2]["cardIds"].append("card-1")
-    updated["columns"][4]["cardIds"].append("ai-created-card")
-    updated["cards"]["card-1"].update(title="AI edited", details="Updated by chat")
-    updated["cards"]["ai-created-card"] = {
-        "id": "ai-created-card",
-        "title": "AI created",
-        "details": "Created by chat",
-    }
-    proposal = {
-        "columns": updated["columns"],
-        "cards": list(updated["cards"].values()),
-    }
+    operations = [
+        operation("update", card_id="card-1", title="AI edited", details="Updated by chat"),
+        operation("move", card_id="card-1", column_id="col-progress", position=1),
+        operation("create", column_id="col-done", title="AI created", details="Created by chat", position=0),
+        operation("update", card_id="card-2", details="Only details change"),
+    ]
     monkeypatch.setattr(
         ai,
         "urlopen",
         lambda _request, timeout: provider_result(
-            {"response": "Updated and added the requested cards.", "board_update": proposal}
+            {"response": "Updated and added the requested cards.", "operations": operations}
         ),
     )
 
-    response = client.post(
-        "/api/ai/chat",
-        json={"message": "Update and add cards."},
-        headers=ORIGIN,
-    )
+    response = client.post("/api/ai/chat", json={"message": "Update and add cards."}, headers=ORIGIN)
 
     assert response.status_code == 200
-    assert response.json() == {
-        "response": "Updated and added the requested cards.",
-        "revision": 1,
-        "board": updated,
+    body = response.json()
+    assert body["response"] == "Updated and added the requested cards."
+    assert body["revision"] == 1
+    board = body["board"]
+    assert [column["id"] for column in board["columns"]] == [c["id"] for c in INITIAL_BOARD["columns"]]
+    assert board["columns"][0]["cardIds"] == ["card-2"]
+    assert board["columns"][2]["cardIds"] == ["card-4", "card-1", "card-5"]
+    new_id = board["columns"][4]["cardIds"][0]
+    assert board["columns"][4]["cardIds"][1:] == ["card-7", "card-8"]
+    assert board["cards"][new_id] == {"id": new_id, "title": "AI created", "details": "Created by chat"}
+    assert board["cards"]["card-1"] == {"id": "card-1", "title": "AI edited", "details": "Updated by chat"}
+    assert board["cards"]["card-2"] == {
+        **INITIAL_BOARD["cards"]["card-2"],
+        "details": "Only details change",
     }
-    assert client.get("/api/board").json() == {"revision": 1, "board": updated}
+    assert len(board["cards"]) == len(INITIAL_BOARD["cards"]) + 1
+    assert client.get("/api/board").json() == {"revision": 1, "board": board}
 
 
-def test_chat_rejects_invalid_structured_board_without_modifying_database(client, monkeypatch):
+def test_chat_schema_has_no_way_to_delete_cards_or_change_columns():
+    action = ai.OPERATION_SCHEMA["properties"]["action"]
+    assert action["enum"] == ["create", "update", "move"]
+    assert set(ai.OPERATION_SCHEMA["properties"]) == {
+        "action", "card_id", "column_id", "title", "details", "position",
+    }
+    with pytest.raises(ValueError):
+        ai.Operation.model_validate(operation("delete", card_id="card-1"))
+
+
+@pytest.mark.parametrize(
+    "bad_operations",
+    [
+        [operation("delete", card_id="card-1")],
+        [operation("update", card_id="missing", title="Nope")],
+        [operation("update", card_id="card-1")],
+        [operation("update", card_id="card-1", title="  ")],
+        [operation("update", card_id=None, title="Nope")],
+        [operation("move", card_id="card-1", column_id="not-a-column")],
+        [operation("move", card_id="card-1")],
+        [operation("move", card_id="card-1", column_id="col-done", position=-1)],
+        [operation("create", column_id="col-done")],
+        [operation("create", title="No column")],
+        [operation("create", column_id="col-done", title="x" * 201)],
+        [operation("move", card_id="card-1", column_id="col-done"), operation("update", card_id="missing", title="x")],
+        [operation("update", card_id="card-1", title="Fine")] * (ai.MAX_OPERATIONS + 1),
+    ],
+)
+def test_chat_rejects_invalid_operations_without_modifying_database(client, monkeypatch, bad_operations):
     logged_in_client(client)
     monkeypatch.setenv("OPENROUTER_API_KEY", API_KEY)
-    invalid = {
-        "columns": copy.deepcopy(INITIAL_BOARD["columns"]),
-        "cards": list(INITIAL_BOARD["cards"].values()),
-    }
-    invalid["columns"][0]["id"] = "not-a-fixed-column"
     monkeypatch.setattr(
         ai,
         "urlopen",
         lambda _request, timeout: provider_result(
-            {"response": "I changed the board.", "board_update": invalid}
+            {"response": "I changed the board.", "operations": bad_operations}
         ),
     )
 
-    response = client.post(
-        "/api/ai/chat",
-        json={"message": "Change the board."},
-        headers=ORIGIN,
-    )
+    response = client.post("/api/ai/chat", json={"message": "Change the board."}, headers=ORIGIN)
 
     assert response.status_code == 502
     assert "required board schema" in response.json()["detail"]
+    assert client.get("/api/board").json() == {"revision": 0, "board": INITIAL_BOARD}
+
+
+def test_chat_rejects_the_old_full_board_format(client, monkeypatch):
+    logged_in_client(client)
+    monkeypatch.setenv("OPENROUTER_API_KEY", API_KEY)
+    empty = {"columns": [], "cards": []}
+    monkeypatch.setattr(
+        ai,
+        "urlopen",
+        lambda _request, timeout: provider_result({"response": "Done.", "board_update": empty}),
+    )
+
+    response = client.post("/api/ai/chat", json={"message": "Delete everything."}, headers=ORIGIN)
+
+    assert response.status_code == 502
     assert client.get("/api/board").json() == {"revision": 0, "board": INITIAL_BOARD}
 
 
@@ -319,9 +364,6 @@ def test_chat_reports_unsupported_structured_outputs_without_fallback(
 def test_chat_conflict_does_not_overwrite_board_changed_during_provider_call(client, monkeypatch):
     logged_in_client(client)
     monkeypatch.setenv("OPENROUTER_API_KEY", API_KEY)
-    proposed = copy.deepcopy(INITIAL_BOARD)
-    proposed["columns"][0]["title"] = "AI proposal"
-
     def update_during_provider_call(_request, timeout):
         latest = client.get("/api/board").json()
         latest["board"]["columns"][0]["title"] = "Concurrent user update"
@@ -334,17 +376,14 @@ def test_chat_conflict_does_not_overwrite_board_changed_during_provider_call(cli
         return provider_result(
             {
                 "response": "I updated the board.",
-                "board_update": {
-                    "columns": proposed["columns"],
-                    "cards": list(proposed["cards"].values()),
-                },
+                "operations": [operation("update", card_id="card-1", title="AI proposal")],
             }
         )
 
     monkeypatch.setattr(ai, "urlopen", update_during_provider_call)
     response = client.post(
         "/api/ai/chat",
-        json={"message": "Rename the first column."},
+        json={"message": "Rename the first card."},
         headers=ORIGIN,
     )
 

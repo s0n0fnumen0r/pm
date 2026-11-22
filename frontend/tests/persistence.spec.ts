@@ -17,8 +17,10 @@ test("reports a conflict between two tabs without overwriting newer changes", as
   const secondTitle = second.getByTestId("column-col-backlog").getByLabel("Column title");
   await expect(secondTitle).toHaveValue("Backlog");
   await page.getByTestId("column-col-backlog").getByLabel("Column title").fill("First tab");
+  await page.getByTestId("column-col-backlog").getByLabel("Column title").press("Enter");
   await expect(page.getByText("All changes saved.")).toBeVisible();
   await secondTitle.fill("Second tab");
+  await secondTitle.press("Enter");
   await expect(second.getByRole("main").getByRole("alert")).toContainText("changed elsewhere");
   await expect(secondTitle).toHaveValue("Second tab");
   await second.getByRole("button", { name: "Load latest board" }).click();
@@ -37,10 +39,11 @@ test("keeps a board after the isolated container restarts", async ({ page, reque
   await page.getByRole("button", { name: "Sign in" }).click();
   const title = page.getByTestId("column-col-backlog").getByLabel("Column title");
   await title.fill("After restart");
+  await title.press("Enter");
   await expect(page.getByText("All changes saved.")).toBeVisible();
   execFileSync("docker", ["restart", container!], { timeout: 30000 });
   await expect.poll(async () => {
-    try { return (await request.get("/api/hello", { timeout: 2000 })).status(); }
+    try { return (await request.get("/api/health", { timeout: 2000 })).status(); }
     catch { return 0; }
   }, { timeout: 20000 }).toBe(200);
   await page.reload();

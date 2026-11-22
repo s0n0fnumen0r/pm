@@ -19,6 +19,7 @@ test("loads the kanban board", async ({ page }) => {
 test("renames a column and updates the header", async ({ page }) => {
   const firstColumn = page.getByTestId("column-col-backlog");
   await firstColumn.getByLabel("Column title").fill("Ideas");
+  await firstColumn.getByLabel("Column title").press("Enter");
   await expect(page.getByRole("main").getByText("Ideas", { exact: true })).toBeVisible();
   await expect(page.getByText("All changes saved.")).toBeVisible();
 });
@@ -120,9 +121,9 @@ test("serves frontend assets and API routes together", async ({ page, request })
     const response = await request.get(asset);
     expect(response.ok()).toBe(true);
   }
-  const response = await request.get("/api/hello");
+  const response = await request.get("/api/health");
   expect(response.status()).toBe(200);
-  expect(await response.json()).toEqual({ message: "Hello from the API!" });
+  expect(await response.json()).toEqual({ status: "ok" });
   expect((await request.get("/api/not-found")).status()).toBe(404);
 });
 
