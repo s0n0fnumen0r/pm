@@ -31,3 +31,7 @@ One container: `backend/Dockerfile` builds the Next.js static export (Node stage
 - AI (`app/ai.py`): `POST /api/ai/chat` sends the board and conversation to OpenRouter (`OPENROUTER_MODEL`, key from `OPENROUTER_API_KEY` in root `.env`) with required Structured Outputs. The model returns at most 25 `create`/`update`/`move` operations (no delete); the server applies them, assigns new card IDs, validates them with the board model and saves through the same revision-checked transaction. Tests mock OpenRouter.
 - `backend/app/initial_board.json` is the seed board shared by the backend and frontend (`frontend/src/lib/kanban.ts` imports it; `next.config.ts` sets the Turbopack root to the repo root for this).
 - Frontend: `AuthGate` -> `KanbanBoard` -> columns/cards plus `AIChatSidebar`. `src/lib/useBoard.ts` owns server state: it serializes revision-checked saves, surfaces pending/failed/conflict/session-expired states, keeps unsaved edits on errors, and accepts board+revision results from AI chat. Board data is `{ columns: [{id, title, cardIds}], cards: {id: card} }`; `moveCard` in `kanban.ts` handles drag-and-drop reordering (dnd-kit).
+
+## Detailed Plan
+
+@docs/PLAN.md
