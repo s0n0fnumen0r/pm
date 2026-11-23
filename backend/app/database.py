@@ -5,7 +5,7 @@ from pathlib import Path
 from collections.abc import Iterator
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 SCHEMA = (
     """CREATE TABLE users (
         id TEXT NOT NULL PRIMARY KEY CHECK (length(id) > 0),
@@ -65,6 +65,36 @@ def transaction(db: sqlite3.Connection, *, write: bool = False) -> Iterator[None
         raise
 
 
+def repair_text_limits(db: sqlite3.Connection) -> None:
+    """Version 2: bring text saved before the board limits existed within them, so reads validate."""
+    # Imported here because app.board imports this module.
+    from app.board import (
+        INITIAL_BOARD,
+        MAX_CARD_DETAILS_LENGTH,
+        MAX_CARD_TITLE_LENGTH,
+        MAX_COLUMN_TITLE_LENGTH,
+    )
+
+    default_titles = {column["id"]: column["title"] for column in INITIAL_BOARD["columns"]}
+    for row in db.execute("SELECT board_id, id, title FROM board_columns").fetchall():
+        title = row["title"][:MAX_COLUMN_TITLE_LENGTH]
+        if not title.strip():
+            title = default_titles[row["id"]]
+        if title != row["title"]:
+            db.execute(
+                "UPDATE board_columns SET title = ? WHERE board_id = ? AND id = ?",
+                (title, row["board_id"], row["id"]),
+            )
+    for row in db.execute("SELECT board_id, id, title, details FROM cards").fetchall():
+        title = row["title"][:MAX_CARD_TITLE_LENGTH]
+        details = row["details"][:MAX_CARD_DETAILS_LENGTH]
+        if (title, details) != (row["title"], row["details"]):
+            db.execute(
+                "UPDATE cards SET title = ?, details = ? WHERE board_id = ? AND id = ?",
+                (title, details, row["board_id"], row["id"]),
+            )
+
+
 def initialize_database() -> None:
     database_path().parent.mkdir(parents=True, exist_ok=True)
     with connection() as db:
@@ -74,6 +104,8 @@ def initialize_database() -> None:
         if version == 0:
             for statement in SCHEMA:
                 db.execute(statement)
-            db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+        elif version == 1:
+            repair_text_limits(db)
         elif version != SCHEMA_VERSION:
             raise RuntimeError(f"Unsupported database schema version: {version}")
+        db.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")

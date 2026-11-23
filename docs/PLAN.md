@@ -14,7 +14,7 @@
 - Browser tests use an isolated container and volume because they reset the test board. They run with an installed Chrome or Edge; Playwright's Chromium download stalled, so Edge was used for verification.
 - Keep the OpenRouter key server-side. The current model is `nvidia/nemotron-3.5-super-vl:free`, selected after the original `nvidia/nemotron-3-ultra-550b-a55b:free` model failed the Structured Outputs check.
 - Preserve the existing visual style and the color scheme in the project instructions. Keep the README concise.
-- The Part 6 Docker `npm ci` reported 25 dependency vulnerabilities, including 4 critical. They were not investigated or fixed in Parts 6–7; current counts have not been reverified.
+- The Part 6 Docker `npm ci` reported 25 dependency vulnerabilities, including 4 critical. They were fixed on 2026-11-23 (Next.js 16.4.6, Vitest 5, `npm audit fix`); `npm audit` and `pip-audit` then reported none.
 
 ## Part 1: Plan
 

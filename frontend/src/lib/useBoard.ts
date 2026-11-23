@@ -5,17 +5,29 @@ import { isBoardData, markLegacyHandled, readLegacyBoard } from "@/lib/boardStor
 import type { BoardData } from "@/lib/kanban";
 
 type BoardResponse = { revision: number; board: BoardData };
-type Status = "loading" | "load-error" | "saved" | "saving" | "error" | "conflict" | "expired" | "reloading";
+type Status = "loading" | "load-error" | "saved" | "saving" | "error" | "invalid" | "conflict" | "expired" | "reloading";
 
 class BoardRequestError extends Error {
-  constructor(public status: number) {
+  constructor(public status: number, public detail = "") {
     super(`Board request failed: ${status}`);
   }
 }
 
+// FastAPI reports validation failures as a list; show the first message without Pydantic's prefix.
+const errorDetail = async (response: Response) => {
+  try {
+    const { detail } = await response.json();
+    if (typeof detail === "string") return detail;
+    const message = Array.isArray(detail) ? detail[0]?.msg : undefined;
+    return typeof message === "string" ? message.replace(/^Value error, /, "") : "";
+  } catch {
+    return "";
+  }
+};
+
 const requestBoard = async (options?: RequestInit): Promise<BoardResponse> => {
   const response = await fetch("/api/board", { cache: "no-store", ...options });
-  if (!response.ok) throw new BoardRequestError(response.status);
+  if (!response.ok) throw new BoardRequestError(response.status, await errorDetail(response));
   const body: unknown = await response.json();
   if (typeof body !== "object" || body === null || !("revision" in body) ||
       typeof body.revision !== "number" || !Number.isSafeInteger(body.revision) || body.revision < 0 ||
@@ -41,7 +53,10 @@ export const useBoard = (onSessionExpired: () => void) => {
   const importing = useRef(false);
   const mounted = useRef(false);
   const expiredCallback = useRef(onSessionExpired);
-  expiredCallback.current = onSessionExpired;
+
+  useEffect(() => {
+    expiredCallback.current = onSessionExpired;
+  });
 
   const rememberLegacyChoice = () => {
     try {
@@ -83,7 +98,7 @@ export const useBoard = (onSessionExpired: () => void) => {
   }, [attempt]);
 
   useEffect(() => {
-    if (status !== "saving" && status !== "error" && status !== "conflict" && status !== "expired" && status !== "reloading") return;
+    if (status === "loading" || status === "load-error" || status === "saved") return;
     const warn = (event: BeforeUnloadEvent) => {
       event.preventDefault();
       event.returnValue = "";
@@ -118,7 +133,10 @@ export const useBoard = (onSessionExpired: () => void) => {
       if (mounted.current) {
         if (error instanceof BoardRequestError && error.status === 409) setStatus("conflict");
         else if (error instanceof BoardRequestError && error.status === 401) setStatus("expired");
-        else setStatus("error");
+        else if (error instanceof BoardRequestError && error.status === 422) {
+          setStatus("invalid");
+          setWarning(error.detail && `The server rejected these changes: ${error.detail}`);
+        } else setStatus("error");
       }
     } finally {
       inFlight.current = false;
@@ -140,6 +158,7 @@ export const useBoard = (onSessionExpired: () => void) => {
 
   const retrySave = () => {
     blocked.current = false;
+    setWarning("");
     setStatus("saving");
     void flush();
   };

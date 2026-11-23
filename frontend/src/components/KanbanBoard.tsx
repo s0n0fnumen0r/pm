@@ -90,7 +90,7 @@ export const KanbanBoard = ({ onLogout, onSessionExpired, loggingOut, logoutErro
 
   const handleAddCard = (columnId: string, title: string, details: string) => {
     const id = createId();
-    updateBoard((prev) => ({
+    updateBoard((prev) => Object.keys(prev.cards).length >= MAX_CARDS ? prev : ({
       ...prev,
       cards: {
         ...prev.cards,
@@ -165,8 +165,8 @@ export const KanbanBoard = ({ onLogout, onSessionExpired, loggingOut, logoutErro
   };
 
   const activeCard = activeCardId && board ? board.cards[activeCardId] : null;
-  const unsaved = editingCards.size > 0 || status === "saving" || status === "error" ||
-    status === "conflict" || status === "expired" || status === "reloading" || chatPending;
+  const unsaved = editingCards.size > 0 || chatPending ||
+    (status !== "loading" && status !== "load-error" && status !== "saved");
 
   return (
     <div className="relative overflow-hidden">
@@ -245,16 +245,17 @@ export const KanbanBoard = ({ onLogout, onSessionExpired, loggingOut, logoutErro
               </div>
             </div>
           )}
-          {(status === "error" || status === "conflict" || status === "expired" || status === "reloading") && (
+          {(status === "error" || status === "invalid" || status === "conflict" || status === "expired" || status === "reloading") && (
             <div className="space-y-3 rounded-xl border border-red-200 p-4 text-sm">
               <p role="alert" className="text-red-700">
                 {status === "error" && "Unable to save. Your changes are not saved."}
+                {status === "invalid" && "Your changes are not saved. Correct them and retry, or load the latest board to discard them."}
                 {status === "conflict" && "The board changed elsewhere. Your changes are not saved. Loading the latest board will discard these local changes."}
                 {status === "expired" && "Your session expired. Your changes are not saved. Sign in again to retry."}
                 {status === "reloading" && "Loading the latest board..."}
               </p>
-              {status === "error" && <button type="button" onClick={retrySave} className="mr-3 underline">Retry save</button>}
-              {status === "conflict" && <button type="button" disabled={editingCards.size > 0} onClick={() => void loadLatest()} className="mr-3 underline disabled:opacity-50">Load latest board</button>}
+              {(status === "error" || status === "invalid") && <button type="button" onClick={retrySave} className="mr-3 underline">Retry save</button>}
+              {(status === "conflict" || status === "invalid") && <button type="button" disabled={editingCards.size > 0} onClick={() => void loadLatest()} className="mr-3 underline disabled:opacity-50">Load latest board</button>}
               {status !== "reloading" && (
                 <button type="button" onClick={onLogout} disabled={loggingOut || editingCards.size > 0} className="underline disabled:opacity-50">
                   Discard unsaved changes and sign out

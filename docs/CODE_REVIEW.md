@@ -154,3 +154,29 @@ Fix: remove it from git and ignore the directory.
 5. D1 to D3: bring `database-approach.md` and `PLAN.md` up to date and commit `CLAUDE.md`.
 6. L2 and L3: harden the test reset guard and untrack `test-results/`.
 7. L1, L4, L5: as convenient.
+
+---
+
+## 7. Implementation log
+
+Date: 2026-11-23. H1 and M1 to M3 were fixed. The Low and Documentation items remain open, except that `PLAN.md`'s vulnerability note was updated.
+
+| Item | Result |
+|---|---|
+| H1 | **Done.** `next` and `eslint-config-next` were upgraded to 16.4.6, `vitest` and `@vitest/coverage-v8` to 5.1.1, `@testing-library/jest-dom` to 8 (the release for Vitest 5, now loaded through `@testing-library/jest-dom/vitest`) and `@types/node` to 24 (Vitest 5's peer range, matching the Node 24 build image). `npm audit fix` updated the remaining transitive packages. `npm audit` now reports 0 vulnerabilities. Three side effects of the upgrade were fixed: the newer React hooks lint rule rejects writing a ref during render, so `useBoard` now updates its callback ref in an effect; the jest-dom type reference changed; and `next build` 16.4 type-checks test files, one of which imports `docs/database-schema.json` from outside the Docker build context, so the build now uses `tsconfig.build.json`, which excludes tests (`tsc --noEmit` still checks them). |
+| M1 | **Done.** `isBoardData` mirrors the backend rules: blank column titles, text and ID length limits counted in code points as Python does, and the 500-card cap. An invalid tab board is now reported as invalid instead of being offered for import. A 422 response puts `useBoard` into a new `invalid` status that shows the server's message and offers both "Retry save" (after the user corrects the board) and "Load latest board" (to discard the change). `handleAddCard` ignores additions at the card limit, which closes the race with forms opened earlier. |
+| M2 | **Done.** For an HTTP 400, the response now includes OpenRouter's own `error.message`, truncated to 300 characters. Without one, the message says that no reason was given, instead of guessing at a schema problem. Timeouts, both read timeouts and connect timeouts wrapped in `URLError`, return 504 with their own message. Other provider errors keep their previous mapping and still do not echo provider text. |
+| M3 | **Done.** `SCHEMA_VERSION` is now 2. At startup, a version 1 database is migrated: column titles, card titles and details are truncated to the limits, and blank column titles are restored to their defaults, all in the same transaction as the version bump. The read-time fallback for blank column titles was removed because the migration covers it. Not repaired: more than 500 cards on one board, or card IDs over 64 characters. Neither can be fixed without deleting or renaming data, and both were only reachable through direct API calls before the limits existed. A read-only check of a copy of the local `board-data` database found 1 board, 8 cards and no rows outside the limits, so on that database the migration only changes the version number. |
+
+### Verification
+
+| Check | Result |
+|---|---|
+| `npm audit` | 0 vulnerabilities |
+| `npm run lint`, `tsc --noEmit` | Clean |
+| Vitest | 36 passed (7 new: invalid tab boards ×4, code-point counting, 422 handling, card-limit race). A mutation check confirmed the card-limit test fails without the guard. |
+| `docker build --target test` | Frontend export built with Next.js 16.4.6; 69 backend tests passed (new: version 1 migration, provider 400 message, read and connect timeouts) |
+| Local `npm run build` | Passed |
+| Playwright (Edge), isolated container and fresh volume | `migration.spec.ts` 1 passed; full suite 19 passed, 1 skipped (the migration spec without `KANBAN_FRESH_TEST`), including the real container restart. The fresh database was created at `user_version` 2. |
+
+No live OpenRouter request was made; the changed error paths are covered by mocked tests.

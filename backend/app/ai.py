@@ -99,7 +99,18 @@ class ChatResponse(StrictModel):
     board: Board
 
 
-def _provider_error_detail(status_code: int, *, structured: bool) -> str:
+def _provider_message(error: HTTPError) -> str:
+    """Return OpenRouter's own error message, which names the real cause of a 400 (such as context length)."""
+    try:
+        message = json.loads(error.read())["error"]["message"]
+    except (ValueError, KeyError, TypeError):
+        return ""
+    return message.strip()[:300] if isinstance(message, str) else ""
+
+
+def _provider_error_detail(status_code: int, *, structured: bool, message: str = "") -> str:
+    if status_code == 400 and message:
+        return f"OpenRouter rejected the request for {OPENROUTER_MODEL}: {message}"
     if status_code in (401, 403):
         return "OpenRouter rejected the API key or its permissions. Check OPENROUTER_API_KEY."
     if status_code == 402:
@@ -113,13 +124,8 @@ def _provider_error_detail(status_code: int, *, structured: bool) -> str:
         return f"OpenRouter could not find the configured model: {OPENROUTER_MODEL}."
     if status_code == 429:
         return "OpenRouter rate limit or model quota reached. Try again later."
-    if status_code == 400 and structured:
-        return (
-            f"OpenRouter rejected Structured Outputs for {OPENROUTER_MODEL}; "
-            "the configured model or provider may not support the requested schema."
-        )
     if status_code == 400:
-        return f"The configured model rejected the connectivity check: {OPENROUTER_MODEL}."
+        return f"OpenRouter rejected the request for {OPENROUTER_MODEL} (HTTP 400) without an error message."
     if status_code >= 500:
         return f"OpenRouter is temporarily unavailable (HTTP {status_code})."
     return f"OpenRouter returned an unexpected HTTP error ({status_code})."
@@ -162,11 +168,20 @@ def _request_openrouter(messages: list[dict[str, str]], *, structured: bool = Fa
         with urlopen(request, timeout=OPENROUTER_TIMEOUT_SECONDS) as response:
             payload = json.loads(response.read())
     except HTTPError as error:
+        message = _provider_message(error) if error.code == 400 else ""
         raise HTTPException(
             status_code=502,
-            detail=_provider_error_detail(error.code, structured=structured),
+            detail=_provider_error_detail(error.code, structured=structured, message=message),
         ) from None
-    except (URLError, TimeoutError):
+    except (TimeoutError, URLError) as error:
+        if isinstance(error, TimeoutError) or isinstance(error.reason, TimeoutError):
+            raise HTTPException(
+                status_code=504,
+                detail=(
+                    f"OpenRouter did not respond within {OPENROUTER_TIMEOUT_SECONDS} seconds. "
+                    "The model may be busy or the board too large; try again."
+                ),
+            ) from None
         raise HTTPException(
             status_code=502,
             detail="Could not reach OpenRouter. Check network connectivity and try again.",

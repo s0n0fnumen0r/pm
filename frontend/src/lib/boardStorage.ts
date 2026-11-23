@@ -1,4 +1,12 @@
-import { initialData, type BoardData } from "@/lib/kanban";
+import {
+  MAX_CARDS,
+  MAX_CARD_DETAILS_LENGTH,
+  MAX_CARD_TITLE_LENGTH,
+  MAX_COLUMN_TITLE_LENGTH,
+  MAX_ID_LENGTH,
+  initialData,
+  type BoardData,
+} from "@/lib/kanban";
 
 export const BOARD_STORAGE_KEY = "kanban-studio-board";
 const MIGRATION_KEY = "kanban-studio-board-migration";
@@ -6,16 +14,21 @@ const MIGRATION_KEY = "kanban-studio-board-migration";
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
+// Count code points, as the backend does, rather than UTF-16 units.
+const isText = (value: unknown, maxLength: number, required = false): value is string =>
+  typeof value === "string" && [...value].length <= maxLength && (!required || value.trim().length > 0);
+
+// Mirrors the backend Board validation in backend/app/board.py.
 export const isBoardData = (value: unknown): value is BoardData => {
   if (!isRecord(value) || !Array.isArray(value.columns) || !isRecord(value.cards)) {
     return false;
   }
   const cards = value.cards;
   const columnIds = initialData.columns.map((column) => column.id);
-  if (!Object.entries(cards).every(([id, card]) =>
+  if (Object.keys(cards).length > MAX_CARDS || !Object.entries(cards).every(([id, card]) =>
     id.length > 0 && !columnIds.includes(id) && isRecord(card) &&
-    card.id === id && typeof card.title === "string" && card.title.trim().length > 0 &&
-    typeof card.details === "string"
+    card.id === id && isText(id, MAX_ID_LENGTH) && isText(card.title, MAX_CARD_TITLE_LENGTH, true) &&
+    isText(card.details, MAX_CARD_DETAILS_LENGTH)
   )) {
     return false;
   }
@@ -23,7 +36,7 @@ export const isBoardData = (value: unknown): value is BoardData => {
   const validColumns = value.columns.length === columnIds.length &&
     value.columns.every((column, index) => {
       if (!isRecord(column) || column.id !== columnIds[index] ||
-          typeof column.title !== "string" || !Array.isArray(column.cardIds)) {
+          !isText(column.title, MAX_COLUMN_TITLE_LENGTH, true) || !Array.isArray(column.cardIds)) {
         return false;
       }
       for (const id of column.cardIds) {

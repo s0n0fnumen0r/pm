@@ -5,6 +5,7 @@ from threading import Barrier
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 
 from app import auth
 from app.board import (
@@ -14,7 +15,7 @@ from app.board import (
     MAX_CARDS,
     MAX_COLUMN_TITLE_LENGTH,
 )
-from app.database import connection, database_path, initialize_database
+from app.database import SCHEMA_VERSION, connection, database_path, initialize_database
 from app.main import app
 
 BASE_URL = "http://127.0.0.1:8765"
@@ -70,12 +71,31 @@ def test_boards_at_the_size_limits_are_accepted(client):
     assert client.get("/api/board").json() == response.json()
 
 
-def test_blank_column_titles_in_older_data_fall_back_to_the_default(client):
+def test_version_1_data_beyond_the_limits_is_repaired_on_startup(client):
     sign_in(client)
     client.get("/api/board")
     with connection() as db:
         db.execute("UPDATE board_columns SET title = '  ' WHERE id = 'col-backlog'")
-    assert client.get("/api/board").json() == {"revision": 0, "board": INITIAL_BOARD}
+        db.execute("UPDATE board_columns SET title = ? WHERE id = 'col-review'", ("r" * 150,))
+        db.execute(
+            "UPDATE cards SET title = ?, details = ? WHERE id = 'card-1'",
+            ("t" * 250, "d" * 6000),
+        )
+        db.execute("PRAGMA user_version = 1")
+    with pytest.raises(ValidationError):
+        client.get("/api/board")
+
+    initialize_database()
+
+    board = client.get("/api/board").json()["board"]
+    titles = {column["id"]: column["title"] for column in board["columns"]}
+    assert titles["col-backlog"] == "Backlog"
+    assert titles["col-review"] == "r" * MAX_COLUMN_TITLE_LENGTH
+    assert board["cards"]["card-1"]["title"] == "t" * MAX_CARD_TITLE_LENGTH
+    assert board["cards"]["card-1"]["details"] == "d" * MAX_CARD_DETAILS_LENGTH
+    assert board["cards"]["card-2"] == INITIAL_BOARD["cards"]["card-2"]
+    with connection() as db:
+        assert db.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
 
 
 def test_authentication_and_origin_are_required(client):

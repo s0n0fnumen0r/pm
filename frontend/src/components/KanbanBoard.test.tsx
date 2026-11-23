@@ -1,8 +1,9 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { KanbanBoard } from "@/components/KanbanBoard";
-import { BOARD_STORAGE_KEY } from "@/lib/boardStorage";
+import { BOARD_STORAGE_KEY, isBoardData } from "@/lib/boardStorage";
 import {
+  MAX_CARDS,
   MAX_CARD_DETAILS_LENGTH,
   MAX_CARD_TITLE_LENGTH,
   MAX_COLUMN_TITLE_LENGTH,
@@ -289,6 +290,62 @@ it("reports invalid prior tab data without overwriting it", async () => {
   expect(await firstColumn()).toBeInTheDocument();
   expect(sessionStorage.getItem(BOARD_STORAGE_KEY)).toBe('{"columns":[]}');
 });
+
+it.each([
+  ["a blank column title", (board: BoardData) => { board.columns[0].title = " "; }],
+  ["an over-long card title", (board: BoardData) => { board.cards["card-1"].title = "x".repeat(MAX_CARD_TITLE_LENGTH + 1); }],
+  ["over-long card details", (board: BoardData) => { board.cards["card-1"].details = "x".repeat(MAX_CARD_DETAILS_LENGTH + 1); }],
+  ["an over-long column title", (board: BoardData) => { board.columns[0].title = "x".repeat(MAX_COLUMN_TITLE_LENGTH + 1); }],
+])("does not offer to import a tab board the server would reject: %s", async (_name, corrupt) => {
+  const legacy = structuredClone(initialData);
+  corrupt(legacy);
+  sessionStorage.setItem(BOARD_STORAGE_KEY, JSON.stringify(legacy));
+  renderBoard();
+  expect(await screen.findByRole("alert")).toHaveTextContent("previous tab board is invalid");
+  expect(screen.queryByRole("button", { name: "Import tab board" })).not.toBeInTheDocument();
+});
+
+it("counts text limits in characters, as the server does", () => {
+  const board = structuredClone(initialData);
+  board.cards["card-1"].title = "\u{1F680}".repeat(MAX_CARD_TITLE_LENGTH);
+  expect(isBoardData(board)).toBe(true);
+  board.cards["card-1"].title += "\u{1F680}";
+  expect(isBoardData(board)).toBe(false);
+});
+
+it("reports a server rejection and lets the user discard the rejected changes", async () => {
+  putOverride = async () => json({ detail: [{ msg: "Value error, Column titles must not be blank" }] }, 422);
+  renderBoard();
+  const input = within(await firstColumn()).getByLabelText("Column title");
+  rename(input, "Rejected");
+  expect(await screen.findByText("The server rejected these changes: Column titles must not be blank")).toBeInTheDocument();
+  expect(screen.getByText(/Correct them and retry, or load the latest board/)).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Sign out" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Retry save" })).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Load latest board" }));
+  await saved();
+  expect(input).toHaveValue("Backlog");
+  expect(screen.queryByText(/server rejected/)).not.toBeInTheDocument();
+});
+
+it("never adds a card beyond the limit, even from forms opened earlier", async () => {
+  for (let index = Object.keys(serverBoard.cards).length; index < MAX_CARDS - 1; index += 1) {
+    const id = `extra-${index}`;
+    serverBoard.cards[id] = { id, title: "Extra", details: "" };
+    serverBoard.columns[0].cardIds.push(id);
+  }
+  renderBoard();
+  const columns = [await firstColumn(), screen.getByTestId("column-col-done")];
+  for (const column of columns) {
+    fireEvent.click(within(column).getByRole("button", { name: /add a card/i }));
+    fireEvent.change(within(column).getByPlaceholderText("Card title"), { target: { value: "Late card" } });
+  }
+  for (const column of columns) {
+    fireEvent.click(within(column).getByRole("button", { name: /^Add card$/ }));
+  }
+  await saved();
+  expect(Object.keys(serverBoard.cards)).toHaveLength(MAX_CARDS);
+}, 30_000);
 
 it("retries a failed initial board load", async () => {
   const fetchMock = vi.mocked(fetch);

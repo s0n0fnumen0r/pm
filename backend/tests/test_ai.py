@@ -327,11 +327,11 @@ def test_chat_rejects_the_old_full_board_format(client, monkeypatch):
 @pytest.mark.parametrize(
     ("status_code", "message"),
     [
-        (400, "may not support the requested schema"),
+        (400, "(HTTP 400) without an error message"),
         (404, "can handle the required Structured Outputs parameters"),
     ],
 )
-def test_chat_reports_unsupported_structured_outputs_without_fallback(
+def test_chat_reports_provider_rejections_without_fallback(
     client, monkeypatch, status_code, message
 ):
     logged_in_client(client)
@@ -358,6 +358,45 @@ def test_chat_reports_unsupported_structured_outputs_without_fallback(
     assert response.status_code == 502
     assert message in response.json()["detail"]
     assert "provider details" not in response.text
+    assert client.get("/api/board").json() == {"revision": 0, "board": INITIAL_BOARD}
+
+
+def test_chat_reports_the_providers_own_message_for_a_bad_request(client, monkeypatch):
+    logged_in_client(client)
+    monkeypatch.setenv("OPENROUTER_API_KEY", API_KEY)
+
+    def reject_long_prompt(_request, timeout):
+        raise HTTPError(
+            ai.OPENROUTER_URL,
+            400,
+            "bad request",
+            hdrs=None,
+            fp=BytesIO(b'{"error":{"message":"This endpoint\'s maximum context length is 131072 tokens."}}'),
+        )
+
+    monkeypatch.setattr(ai, "urlopen", reject_long_prompt)
+    response = client.post("/api/ai/chat", json={"message": "Hello."}, headers=ORIGIN)
+
+    assert response.status_code == 502
+    assert "maximum context length is 131072 tokens" in response.json()["detail"]
+    assert "schema" not in response.json()["detail"]
+    assert API_KEY not in response.text
+
+
+@pytest.mark.parametrize("error", [TimeoutError("timed out"), URLError(TimeoutError("timed out"))])
+def test_chat_reports_timeouts_separately_from_network_failures(client, monkeypatch, error):
+    logged_in_client(client)
+    monkeypatch.setenv("OPENROUTER_API_KEY", API_KEY)
+
+    def time_out(_request, timeout):
+        raise error
+
+    monkeypatch.setattr(ai, "urlopen", time_out)
+    response = client.post("/api/ai/chat", json={"message": "Hello."}, headers=ORIGIN)
+
+    assert response.status_code == 504
+    assert f"did not respond within {ai.OPENROUTER_TIMEOUT_SECONDS} seconds" in response.json()["detail"]
+    assert "network connectivity" not in response.json()["detail"]
     assert client.get("/api/board").json() == {"revision": 0, "board": INITIAL_BOARD}
 
 

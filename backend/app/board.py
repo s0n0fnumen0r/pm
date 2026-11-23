@@ -119,10 +119,8 @@ def load_board(username: str) -> BoardResponse:
 
 def read_board(db: sqlite3.Connection, board_id: str) -> BoardResponse:
     revision = db.execute("SELECT revision FROM boards WHERE id = ?", (board_id,)).fetchone()["revision"]
-    seed_titles = {column["id"]: column["title"] for column in INITIAL_BOARD["columns"]}
     columns = [
-        # Boards saved before blank column titles were rejected fall back to the default title.
-        Column(id=row["id"], title=row["title"] if row["title"].strip() else seed_titles[row["id"]], cardIds=[])
+        Column(id=row["id"], title=row["title"], cardIds=[])
         for row in db.execute(
             "SELECT id, title FROM board_columns WHERE board_id = ? ORDER BY position", (board_id,)
         )
