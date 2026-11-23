@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { MAX_CARD_DETAILS_LENGTH, MAX_CARD_TITLE_LENGTH, MAX_CARDS } from "@/lib/kanban";
+import { PlusIcon } from "@/components/icons";
 
 const initialFormState = { title: "", details: "" };
 
@@ -23,9 +24,9 @@ export const NewCardForm = ({ onAdd, atLimit }: NewCardFormProps) => {
   };
 
   return (
-    <div className="mt-4">
+    <div className="mt-3">
       {isOpen ? (
-        <form onSubmit={handleSubmit} className="space-y-3">
+        <form onSubmit={handleSubmit} className="space-y-2">
           <input
             value={formState.title}
             onChange={(event) =>
@@ -33,7 +34,7 @@ export const NewCardForm = ({ onAdd, atLimit }: NewCardFormProps) => {
             }
             placeholder="Card title"
             maxLength={MAX_CARD_TITLE_LENGTH}
-            className="w-full rounded-xl border border-[var(--stroke)] bg-white px-3 py-2 text-sm font-medium text-[var(--navy-dark)] outline-none transition focus:border-[var(--primary-blue)]"
+            className="cyber-input font-medium"
             required
           />
           <textarea
@@ -44,13 +45,10 @@ export const NewCardForm = ({ onAdd, atLimit }: NewCardFormProps) => {
             placeholder="Details"
             maxLength={MAX_CARD_DETAILS_LENGTH}
             rows={3}
-            className="w-full resize-none rounded-xl border border-[var(--stroke)] bg-white px-3 py-2 text-sm text-[var(--gray-text)] outline-none transition focus:border-[var(--primary-blue)]"
+            className="cyber-input resize-none"
           />
           <div className="flex items-center gap-2">
-            <button
-              type="submit"
-              className="rounded-full bg-[var(--secondary-purple)] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:brightness-110"
-            >
+            <button type="submit" className="cyber-btn cyber-btn-primary">
               Add card
             </button>
             <button
@@ -59,7 +57,7 @@ export const NewCardForm = ({ onAdd, atLimit }: NewCardFormProps) => {
                 setIsOpen(false);
                 setFormState(initialFormState);
               }}
-              className="rounded-full border border-[var(--stroke)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--gray-text)] transition hover:text-[var(--navy-dark)]"
+              className="cyber-btn cyber-btn-ghost"
             >
               Cancel
             </button>
@@ -71,8 +69,9 @@ export const NewCardForm = ({ onAdd, atLimit }: NewCardFormProps) => {
           onClick={() => setIsOpen(true)}
           disabled={atLimit}
           title={atLimit ? `The board is limited to ${MAX_CARDS} cards` : undefined}
-          className="w-full rounded-full border border-dashed border-[var(--stroke)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--primary-blue)] transition hover:border-[var(--primary-blue)] disabled:opacity-50"
+          className="flex w-full items-center justify-center gap-2 border border-dashed border-[var(--line)] px-3 py-2 font-mono text-[11px] font-semibold uppercase tracking-[0.2em] text-[var(--muted)] transition hover:border-[var(--cyan)] hover:bg-[rgba(0,240,255,0.06)] hover:text-[var(--cyan)] disabled:opacity-40"
         >
+          <PlusIcon />
           Add a card
         </button>
       )}

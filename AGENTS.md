@@ -34,11 +34,14 @@ A working MVP of the frontend has been built and is already in frontend. This is
 
 ## Color Scheme
 
-- Accent Yellow: `#ecad0a` - accent lines, highlights
-- Blue Primary: `#209dd7` - links, key sections
-- Purple Secondary: `#753991` - submit buttons, important actions
-- Dark Navy: `#032147` - main headings
-- Gray Text: `#888888` - supporting text, labels
+Dark cyberpunk theme (defined as CSS variables in `frontend/src/app/globals.css`):
+
+- Background: `#05030b`, panels `#120c26`
+- Neon Cyan `#00f0ff` - primary accent, links, focus, key sections
+- Neon Magenta `#ff2bd6` - submit buttons, important actions
+- Neon Yellow `#f9e900` - highlights, pending states
+- Text `#e8e4ff`; Muted `#8b84ad` - supporting text, labels
+- Danger `#ff3b5c` - errors and delete hover
 
 ## Coding standards
 

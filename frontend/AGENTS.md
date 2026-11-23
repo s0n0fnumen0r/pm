@@ -18,8 +18,8 @@ The rendering and data flow is:
 ## Application entry and styling
 
 - **`src/app/page.tsx`**: The `/` route; renders the authentication gate.
-- **`src/app/layout.tsx`**: Root HTML layout, page title and description. Loads the Manrope body font and Space Grotesk display font using `next/font/google`, and imports the global stylesheet.
-- **`src/app/globals.css`**: Imports Tailwind CSS and defines the project color, surface, border, shadow, and font variables. Applies global body styles and the `font-display` class; most component styling is expressed with Tailwind utilities.
+- **`src/app/layout.tsx`**: Root HTML layout, page title and description. Loads the Orbitron display, Chakra Petch body and JetBrains Mono fonts using `next/font/google`, imports the global stylesheet, and renders the fixed decorative backdrop (neon haze, grid floor, scanlines) behind the page.
+- **`src/app/globals.css`**: Imports Tailwind CSS and defines the dark cyberpunk theme: color variables, the backdrop and scan beam, and shared classes in `@layer components` (`hud-panel`, `cyber-card`, `cyber-btn`, `icon-btn`, `cyber-input`, `glitch`, `status-dot`) so Tailwind utilities can still override them. Animations are disabled under `prefers-reduced-motion`.
 - **`src/app/favicon.ico`**: The app's browser icon, picked up by the App Router.
 
 ## Components
@@ -27,9 +27,10 @@ The rendering and data flow is:
 - **`AuthGate`** (`src/components/AuthGate.tsx`): Checks `/api/session` on load, displays sign-in, handles `/api/login` and `/api/logout`, and reports authentication or connectivity errors. It renders the board only for a server-verified session; the session cookie is managed by the backend.
 - **`KanbanBoard`** (`src/components/KanbanBoard.tsx`): The board container. It displays loading, save, conflict, session-expiration, and legacy-import states; tracks drag and card-edit drafts; and owns board mutation callbacks. It prevents ordinary sign-out with unsaved changes, offers reauthentication and retry on session expiry, and warns before leaving with unsaved work. New cards receive a UUID; empty details stay empty and the card shows `No details yet.` at render time. Its dnd-kit context uses a pointer sensor and a keyboard sensor, pointer-first collision detection with a closest-corners fallback, and a `DragOverlay`. Adding cards is disabled at the 500-card limit.
 - **`AIChatSidebar`** (`src/components/AIChatSidebar.tsx`): Displays the current chat, sends the latest message with prior conversation history, reports pending and API errors, and syncs validated board revisions returned by the backend. Chat is disabled while board edits are unsaved or a request is pending.
-- **`KanbanColumn`** (`src/components/KanbanColumn.tsx`): Receives a column, its resolved card objects, and callbacks for renaming, adding, editing, and deleting. It registers the column as a drop target, displays the card count and an editable column title (a local draft committed on blur or Enter; Escape or a blank value reverts), and renders cards in a vertical `SortableContext`. Empty columns show a drop prompt. Its `NewCardForm` forwards new card values with the column ID.
-- **`KanbanCard`** (`src/components/KanbanCard.tsx`): Registers a sortable card and displays its title, details, edit, and remove controls. Its inline edit form validates a non-blank title, permits cancelling, and disables dragging while open. Edit-draft state is reported to the board.
+- **`KanbanColumn`** (`src/components/KanbanColumn.tsx`): Receives a column, its resolved card objects, and callbacks for renaming, adding, editing, and deleting. It registers the column as a drop target, displays its number, accent color (cycled by index), the card count and an editable column title (a local draft committed on blur or Enter; Escape or a blank value reverts), and renders cards in a vertical `SortableContext`. Empty columns show a drop prompt. Its `NewCardForm` forwards new card values with the column ID.
+- **`KanbanCard`** (`src/components/KanbanCard.tsx`): Registers a sortable card and displays its title, details, and icon-only edit and delete buttons (labelled `Edit <title>` / `Delete <title>`). Its inline edit form validates a non-blank title, permits cancelling, and disables dragging while open. Edit-draft state is reported to the board.
 - **`KanbanCardPreview`** (`src/components/KanbanCardPreview.tsx`): Receives a card and renders a non-interactive title and details preview inside the board's drag overlay.
+- **`icons`** (`src/components/icons.tsx`): Small inline SVG icons (edit, delete, plus, send, power), hidden from assistive technology; buttons carry the accessible name.
 - **`NewCardForm`** (`src/components/NewCardForm.tsx`): Receives an `onAdd` callback and manages its own open/closed state and title/details inputs. Submission requires a non-blank title, trims both values, calls `onAdd`, and resets and closes the form. Cancel also resets and closes it.
 
 The board data shape separates ordered columns and their `cardIds` from the card lookup. `moveCard` handles reordering within a column and moving between columns; the column and card components communicate changes through callbacks rather than maintaining their own board data.
@@ -87,4 +88,4 @@ Run from `frontend/`:
 - `npm test` and `npm run test:unit` run Vitest once; `npm run test:unit:watch` runs it in watch mode.
 - `npm run test:e2e` runs Playwright; `npm run test:all` runs unit tests followed by browser tests.
 
-TypeScript uses the `@/` alias for `src/`. Preserve the existing design and interactions when integrating the backend.
+TypeScript uses the `@/` alias for `src/`. Preserve the dark cyberpunk design and existing interactions. The board header is a compact bar; columns use a five-column grid from `lg`, and the chat sits beside the board as a sticky panel from `2xl` (below the board on smaller screens).

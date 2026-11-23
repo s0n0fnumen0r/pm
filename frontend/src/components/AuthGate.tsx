@@ -102,17 +102,24 @@ export const AuthGate = () => {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[var(--surface)] px-6 py-12">
-      <section className="w-full max-w-md rounded-[32px] border border-[var(--stroke)] bg-white p-8 shadow-[var(--shadow)]">
-        <div className="h-2 w-12 rounded-full bg-[var(--accent-yellow)]" />
-        <h1 className="mt-6 font-display text-3xl font-semibold text-[var(--navy-dark)]">
-          Kanban Studio
+    <main className="flex min-h-screen items-center justify-center px-6 py-12">
+      <section className="hud-panel w-full max-w-md p-8">
+        <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.35em] text-[var(--magenta)]">
+          Access terminal <span className="text-[var(--muted)]">{"// auth required"}</span>
+        </p>
+        <h1 className="mt-3 font-display text-3xl font-black uppercase">
+          <span className="glitch">
+            Kanban Studio
+            <span className="glitch-layer glitch-layer-a" aria-hidden="true">Kanban Studio</span>
+            <span className="glitch-layer glitch-layer-b" aria-hidden="true">Kanban Studio</span>
+          </span>
         </h1>
+        <div className="mt-4 h-[2px] w-full bg-gradient-to-r from-[var(--cyan)] via-[var(--magenta)] to-transparent shadow-[var(--glow-magenta)]" />
         {view === "checking" ? (
-          <p className="mt-4 text-sm text-[var(--gray-text)]">Checking your session...</p>
+          <p className="cursor-blink mt-6 font-mono text-sm text-[var(--cyan)]">Checking your session...</p>
         ) : view === "check-error" ? (
           <div className="mt-6 space-y-4">
-            <p role="alert" className="text-sm text-red-700">{error}</p>
+            <p role="alert" className="text-sm text-[var(--danger)]">{error}</p>
             <button
               type="button"
               onClick={() => {
@@ -120,25 +127,25 @@ export const AuthGate = () => {
                 setView("checking");
                 setAttempt((value) => value + 1);
               }}
-              className="rounded-full bg-[var(--secondary-purple)] px-5 py-3 text-sm font-semibold text-white"
+              className="cyber-btn cyber-btn-primary"
             >
               Try again
             </button>
           </div>
         ) : (
           <form onSubmit={handleLogin} className="mt-6 space-y-5">
-            <p className="text-sm text-[var(--gray-text)]">Sign in to access your board.</p>
-            <label className="block text-sm font-semibold text-[var(--navy-dark)]">
+            <p className="text-sm text-[var(--muted)]">Sign in to access your board.</p>
+            <label className="block font-mono text-xs font-semibold uppercase tracking-[0.2em] text-[var(--cyan)]">
               Username
               <input
                 autoComplete="username"
                 required
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
-                className="mt-2 w-full rounded-xl border border-[var(--stroke)] px-4 py-3 font-normal outline-none focus:border-[var(--primary-blue)]"
+                className="cyber-input mt-2 px-4 py-3 font-sans normal-case tracking-normal"
               />
             </label>
-            <label className="block text-sm font-semibold text-[var(--navy-dark)]">
+            <label className="block font-mono text-xs font-semibold uppercase tracking-[0.2em] text-[var(--cyan)]">
               Password
               <input
                 type="password"
@@ -146,14 +153,14 @@ export const AuthGate = () => {
                 required
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                className="mt-2 w-full rounded-xl border border-[var(--stroke)] px-4 py-3 font-normal outline-none focus:border-[var(--primary-blue)]"
+                className="cyber-input mt-2 px-4 py-3 font-sans normal-case tracking-normal"
               />
             </label>
-            {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+            {error && <p role="alert" className="text-sm text-[var(--danger)]">{error}</p>}
             <button
               type="submit"
               disabled={busy}
-              className="w-full rounded-full bg-[var(--secondary-purple)] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-60"
+              className="cyber-btn cyber-btn-primary w-full py-3"
             >
               {busy ? "Signing in..." : "Sign in"}
             </button>

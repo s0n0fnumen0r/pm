@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import clsx from "clsx";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
@@ -6,8 +6,11 @@ import { MAX_COLUMN_TITLE_LENGTH, type Card, type Column } from "@/lib/kanban";
 import { KanbanCard } from "@/components/KanbanCard";
 import { NewCardForm } from "@/components/NewCardForm";
 
+const ACCENTS = ["var(--cyan)", "var(--magenta)", "var(--yellow)"];
+
 type KanbanColumnProps = {
   column: Column;
+  index: number;
   cards: Card[];
   atCardLimit: boolean;
   onRename: (columnId: string, title: string) => void;
@@ -19,6 +22,7 @@ type KanbanColumnProps = {
 
 export const KanbanColumn = ({
   column,
+  index,
   cards,
   atCardLimit,
   onRename,
@@ -43,38 +47,38 @@ export const KanbanColumn = ({
     else setDraft(title);
   };
 
+  const accent = ACCENTS[index % ACCENTS.length];
+
   return (
     <section
       ref={setNodeRef}
+      style={{ "--col-accent": accent } as CSSProperties}
       className={clsx(
-        "flex min-h-[520px] flex-col rounded-3xl border border-[var(--stroke)] bg-[var(--surface-strong)] p-4 shadow-[var(--shadow)] transition",
-        isOver && "ring-2 ring-[var(--accent-yellow)]"
+        "hud-panel flex min-h-[200px] min-w-0 flex-col p-3 transition-shadow sm:min-h-[360px] lg:min-h-[calc(100vh-260px)]",
+        isOver && "shadow-[0_0_0_1px_var(--col-accent),0_0_28px_-4px_var(--col-accent)]"
       )}
       data-testid={`column-${column.id}`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="w-full">
-          <div className="flex items-center gap-3">
-            <div className="h-2 w-10 rounded-full bg-[var(--accent-yellow)]" />
-            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)]">
-              {cards.length} cards
-            </span>
-          </div>
-          <input
-            value={draft}
-            maxLength={MAX_COLUMN_TITLE_LENGTH}
-            onChange={(event) => setDraft(event.target.value)}
-            onBlur={commitTitle}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") event.currentTarget.blur();
-              if (event.key === "Escape") setDraft(column.title);
-            }}
-            className="mt-3 w-full bg-transparent font-display text-lg font-semibold text-[var(--navy-dark)] outline-none"
-            aria-label="Column title"
-          />
+      <div className="border-b border-[var(--line)] pb-3">
+        <div className="flex items-center justify-between gap-2 font-mono text-[10px] font-semibold uppercase tracking-[0.25em]">
+          <span style={{ color: accent }}>{`${String(index + 1).padStart(2, "0")} //`}</span>
+          <span className="text-[var(--muted)]">{cards.length} cards</span>
         </div>
+        <input
+          value={draft}
+          maxLength={MAX_COLUMN_TITLE_LENGTH}
+          onChange={(event) => setDraft(event.target.value)}
+          onBlur={commitTitle}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") event.currentTarget.blur();
+            if (event.key === "Escape") setDraft(column.title);
+          }}
+          className="mt-2 w-full border-b border-transparent bg-transparent font-display text-sm font-bold uppercase text-[var(--text)] outline-none transition focus:border-[var(--col-accent)]"
+          aria-label="Column title"
+        />
+        <div className="mt-2 h-[2px] w-full" style={{ background: `linear-gradient(90deg, ${accent}, transparent)`, boxShadow: `0 0 8px ${accent}` }} />
       </div>
-      <div className="mt-4 flex flex-1 flex-col gap-3">
+      <div className="mt-3 flex flex-1 flex-col gap-2.5">
         <SortableContext items={column.cardIds} strategy={verticalListSortingStrategy}>
           {cards.map((card) => (
             <KanbanCard
@@ -87,7 +91,7 @@ export const KanbanColumn = ({
           ))}
         </SortableContext>
         {cards.length === 0 && (
-          <div className="flex flex-1 items-center justify-center rounded-2xl border border-dashed border-[var(--stroke)] px-3 py-6 text-center text-xs font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)]">
+          <div className="flex flex-1 items-center justify-center border border-dashed border-[var(--line)] px-3 py-6 text-center font-mono text-[10px] font-semibold uppercase tracking-[0.25em] text-[var(--muted)]">
             Drop a card here
           </div>
         )}

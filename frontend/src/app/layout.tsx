@@ -1,14 +1,20 @@
 import type { Metadata } from "next";
-import { Manrope, Space_Grotesk } from "next/font/google";
+import { Chakra_Petch, JetBrains_Mono, Orbitron } from "next/font/google";
 import "./globals.css";
 
-const displayFont = Space_Grotesk({
+const displayFont = Orbitron({
   variable: "--font-display",
   subsets: ["latin"],
 });
 
-const bodyFont = Manrope({
+const bodyFont = Chakra_Petch({
   variable: "--font-body",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+});
+
+const monoFont = JetBrains_Mono({
+  variable: "--font-mono-face",
   subsets: ["latin"],
 });
 
@@ -24,8 +30,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${displayFont.variable} ${bodyFont.variable}`}>
-        {children}
+      <body className={`${displayFont.variable} ${bodyFont.variable} ${monoFont.variable}`}>
+        <div className="cyber-backdrop" aria-hidden="true" />
+        <div className="scan-beam" aria-hidden="true" />
+        <div className="relative z-10">{children}</div>
       </body>
     </html>
   );

@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import clsx from "clsx";
+import { SendIcon } from "@/components/icons";
 import { isBoardData } from "@/lib/boardStorage";
 import type { BoardData } from "@/lib/kanban";
 
@@ -117,16 +119,20 @@ export const AIChatSidebar = ({
   return (
     <aside
       aria-labelledby="ai-chat-title"
-      className="flex h-[640px] max-h-[75vh] min-h-[420px] flex-col overflow-hidden rounded-[24px] border border-[var(--stroke)] bg-white/90 shadow-[var(--shadow)] backdrop-blur"
+      className="hud-panel flex h-[480px] max-h-[80vh] min-h-[360px] flex-col 2xl:sticky 2xl:top-4 2xl:h-[calc(100vh-8.5rem)] 2xl:max-h-none"
     >
-      <header className="border-b border-[var(--stroke)] p-5">
-        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--gray-text)]">
-          Kanban assistant
-        </p>
-        <h2 id="ai-chat-title" className="mt-2 font-display text-xl font-semibold text-[var(--navy-dark)]">
+      <header className="border-b border-[var(--line)] px-4 py-3">
+        <div className="flex items-center justify-between font-mono text-[10px] font-semibold uppercase tracking-[0.3em]">
+          <span className="text-[var(--magenta)]">Kanban assistant</span>
+          <span className="flex items-center gap-2 text-[var(--muted)]">
+            <span className={clsx("status-dot", (pending || disabled) && "status-dot-busy")} />
+            {pending ? "Processing" : disabled ? "Standby" : "Online"}
+          </span>
+        </div>
+        <h2 id="ai-chat-title" className="mt-1 font-display text-base font-bold uppercase text-[var(--text)]">
           Chat with your board
         </h2>
-        <p className="mt-2 text-xs leading-5 text-[var(--gray-text)]">
+        <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
           Your board and messages are sent to OpenRouter to answer your request.
         </p>
       </header>
@@ -135,34 +141,38 @@ export const AIChatSidebar = ({
         role="log"
         aria-label="Conversation"
         aria-live="polite"
-        className="flex-1 space-y-3 overflow-y-auto p-4"
+        className="thin-scroll flex-1 space-y-3 overflow-y-auto p-4"
       >
         {messages.length === 0 && (
-          <p className="rounded-2xl bg-[var(--surface)] p-4 text-sm leading-6 text-[var(--gray-text)]">
-            Ask a question about your board or request card changes.
+          <p className="border border-dashed border-[var(--line)] p-4 font-mono text-xs leading-6 text-[var(--muted)]">
+            <span className="neon-cyan">&gt;</span> Ask a question about your board or request card changes.
           </p>
         )}
         {messages.map((message, index) => (
           <div
             key={`${message.role}-${index}`}
-            className={`max-w-[95%] rounded-2xl px-4 py-3 text-sm leading-6 ${
+            className={clsx(
+              "max-w-[92%] border px-3 py-2 text-sm leading-6",
               message.role === "user"
-                ? "ml-auto bg-[var(--navy-dark)] text-white"
-                : "mr-auto border border-[var(--stroke)] bg-[var(--surface)] text-[var(--navy-dark)]"
-            }`}
+                ? "ml-auto border-[rgba(255,43,214,0.45)] bg-[rgba(255,43,214,0.1)] text-[var(--text)]"
+                : "mr-auto border-[var(--line-strong)] bg-[rgba(0,240,255,0.06)] text-[var(--text)]"
+            )}
           >
-            <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] opacity-70">
+            <p className={clsx(
+              "mb-1 font-mono text-[10px] font-semibold uppercase tracking-[0.2em]",
+              message.role === "user" ? "neon-magenta" : "neon-cyan"
+            )}>
               {message.role === "user" ? "You" : "Assistant"}
             </p>
             <p className="whitespace-pre-wrap break-words">{message.content}</p>
           </div>
         ))}
-        {pending && <p role="status" className="text-sm text-[var(--gray-text)]">Assistant is thinking...</p>}
+        {pending && <p role="status" className="cursor-blink font-mono text-xs uppercase tracking-[0.15em] text-[var(--cyan)]">Assistant is thinking...</p>}
       </div>
 
-      {error && <p role="alert" className="px-4 pb-2 text-sm text-red-700">{error}</p>}
+      {error && <p role="alert" className="px-4 pb-2 text-sm text-[var(--danger)]">{error}</p>}
 
-      <form onSubmit={handleSubmit} className="space-y-3 border-t border-[var(--stroke)] p-4">
+      <form onSubmit={handleSubmit} className="space-y-2 border-t border-[var(--line)] p-4">
         <label htmlFor="ai-chat-message" className="sr-only">Message the assistant</label>
         <textarea
           id="ai-chat-message"
@@ -172,15 +182,16 @@ export const AIChatSidebar = ({
           onChange={(event) => setDraft(event.target.value)}
           placeholder="Ask a question or request a board change..."
           disabled={disabled || pending}
-          className="w-full resize-none rounded-2xl border border-[var(--stroke)] bg-white px-4 py-3 text-sm outline-none focus:border-[var(--primary-blue)] disabled:opacity-60"
+          className="cyber-input resize-none"
         />
         <div className="flex items-center justify-between gap-3">
-          <span className="text-xs text-[var(--gray-text)]">{draft.length}/4000</span>
+          <span className="font-mono text-[10px] text-[var(--muted)]">{draft.length}/4000</span>
           <button
             type="submit"
             disabled={disabled || pending || !draft.trim()}
-            className="rounded-full bg-[var(--secondary-purple)] px-5 py-2 text-sm font-semibold text-white transition hover:brightness-110 disabled:opacity-50"
+            className="cyber-btn cyber-btn-primary"
           >
+            <SendIcon />
             {pending ? "Thinking..." : "Send"}
           </button>
         </div>

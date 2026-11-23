@@ -3,6 +3,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
 import { MAX_CARD_DETAILS_LENGTH, MAX_CARD_TITLE_LENGTH, type Card } from "@/lib/kanban";
+import { DeleteIcon, EditIcon } from "@/components/icons";
 
 type KanbanCardProps = {
   card: Card;
@@ -40,9 +41,9 @@ export const KanbanCard = ({ card, onDelete, onEdit, onEditingChange }: KanbanCa
       ref={setNodeRef}
       style={style}
       className={clsx(
-        "rounded-2xl border border-transparent bg-white px-4 py-4 shadow-[0_12px_24px_rgba(3,33,71,0.08)]",
-        "transition-all duration-150",
-        isDragging && "opacity-60 shadow-[0_18px_32px_rgba(3,33,71,0.16)]"
+        "cyber-card group px-3 py-3",
+        editing ? "cursor-default" : "cursor-grab active:cursor-grabbing",
+        isDragging && "opacity-30"
       )}
       {...(!editing && attributes)}
       {...(!editing && listeners)}
@@ -50,7 +51,7 @@ export const KanbanCard = ({ card, onDelete, onEdit, onEditingChange }: KanbanCa
     >
       {editing ? (
         <form onSubmit={save} onPointerDown={(event) => event.stopPropagation()} className="space-y-3">
-          <label className="block text-xs font-semibold text-[var(--navy-dark)]">
+          <label className="block font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--cyan)]">
             Card title
             <input
               aria-label="Edit card title"
@@ -60,12 +61,12 @@ export const KanbanCard = ({ card, onDelete, onEdit, onEditingChange }: KanbanCa
                 setTitle(event.target.value);
                 setTitleError("");
               }}
-              className="mt-1 w-full rounded-xl border border-[var(--stroke)] px-3 py-2 text-sm"
+              className="cyber-input mt-1 font-sans normal-case tracking-normal"
               required
             />
           </label>
-          {titleError && <p role="alert" className="text-xs text-red-700">{titleError}</p>}
-          <label className="block text-xs font-semibold text-[var(--navy-dark)]">
+          {titleError && <p role="alert" className="text-xs text-[var(--danger)]">{titleError}</p>}
+          <label className="block font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--cyan)]">
             Details
             <textarea
               aria-label="Edit card details"
@@ -73,55 +74,62 @@ export const KanbanCard = ({ card, onDelete, onEdit, onEditingChange }: KanbanCa
               value={details}
               onChange={(event) => setDetails(event.target.value)}
               rows={3}
-              className="mt-1 w-full rounded-xl border border-[var(--stroke)] px-3 py-2 text-sm"
+              className="cyber-input mt-1 resize-y font-sans normal-case tracking-normal"
             />
           </label>
           <div className="flex gap-2">
-            <button type="submit" className="rounded-full bg-[var(--secondary-purple)] px-3 py-2 text-xs font-semibold text-white">
+            <button type="submit" className="cyber-btn cyber-btn-primary">
               Save
             </button>
             <button type="button" onClick={() => {
               setEditing(false);
               onEditingChange(card.id, false);
-            }} className="rounded-full border border-[var(--stroke)] px-3 py-2 text-xs font-semibold">
+            }} className="cyber-btn cyber-btn-ghost">
               Cancel
             </button>
           </div>
         </form>
-      ) : <div className="flex items-start justify-between gap-3">
-        <div>
-          <h4 className="font-display text-base font-semibold text-[var(--navy-dark)]">
-            {card.title}
-          </h4>
-          <p className="mt-2 text-sm leading-6 text-[var(--gray-text)]">
+      ) : (
+        <>
+          <div className="flex items-start gap-2">
+            <h4 className="min-w-0 flex-1 break-words text-[15px] font-semibold leading-snug text-[var(--text)]">
+              {card.title}
+            </h4>
+            <div
+              className="-mr-1 -mt-1 flex shrink-0 opacity-60 transition group-hover:opacity-100 group-focus-within:opacity-100"
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  setTitle(card.title);
+                  setDetails(card.details);
+                  setTitleError("");
+                  setEditing(true);
+                  onEditingChange(card.id, true);
+                }}
+                className="icon-btn"
+                aria-label={`Edit ${card.title}`}
+                title="Edit card"
+              >
+                <EditIcon />
+              </button>
+              <button
+                type="button"
+                onClick={() => onDelete(card.id)}
+                className="icon-btn icon-btn-danger"
+                aria-label={`Delete ${card.title}`}
+                title="Delete card"
+              >
+                <DeleteIcon />
+              </button>
+            </div>
+          </div>
+          <p className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--muted)]">
             {card.details || "No details yet."}
           </p>
-        </div>
-        <div className="flex flex-col" onPointerDown={(event) => event.stopPropagation()}>
-          <button
-            type="button"
-            onClick={() => {
-              setTitle(card.title);
-              setDetails(card.details);
-              setTitleError("");
-              setEditing(true);
-              onEditingChange(card.id, true);
-            }}
-            className="rounded-full border border-transparent px-2 py-1 text-xs font-semibold text-[var(--primary-blue)] transition hover:border-[var(--stroke)]"
-            aria-label={`Edit ${card.title}`}
-          >
-            Edit
-          </button>
-          <button
-            type="button"
-            onClick={() => onDelete(card.id)}
-            className="rounded-full border border-transparent px-2 py-1 text-xs font-semibold text-[var(--gray-text)] transition hover:border-[var(--stroke)] hover:text-[var(--navy-dark)]"
-            aria-label={`Delete ${card.title}`}
-          >
-            Remove
-          </button>
-        </div>
-      </div>}
+        </>
+      )}
     </article>
   );
 };

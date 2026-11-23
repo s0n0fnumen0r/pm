@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
+import clsx from "clsx";
 import {
   DndContext,
   DragOverlay,
@@ -18,6 +19,7 @@ import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { AIChatSidebar } from "@/components/AIChatSidebar";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
+import { PowerIcon } from "@/components/icons";
 import { MAX_CARDS, createId, moveCard } from "@/lib/kanban";
 import { useBoard } from "@/lib/useBoard";
 
@@ -168,155 +170,157 @@ export const KanbanBoard = ({ onLogout, onSessionExpired, loggingOut, logoutErro
   const unsaved = editingCards.size > 0 || chatPending ||
     (status !== "loading" && status !== "load-error" && status !== "saved");
 
-  return (
-    <div className="relative overflow-hidden">
-      <div className="pointer-events-none absolute left-0 top-0 h-[420px] w-[420px] -translate-x-1/3 -translate-y-1/3 rounded-full bg-[radial-gradient(circle,_rgba(32,157,215,0.25)_0%,_rgba(32,157,215,0.05)_55%,_transparent_70%)]" />
-      <div className="pointer-events-none absolute bottom-0 right-0 h-[520px] w-[520px] translate-x-1/4 translate-y-1/4 rounded-full bg-[radial-gradient(circle,_rgba(117,57,145,0.18)_0%,_rgba(117,57,145,0.05)_55%,_transparent_75%)]" />
+  const errorPanel = status === "error" || status === "invalid" || status === "conflict" ||
+    status === "expired" || status === "reloading";
+  const linkButton = "font-mono text-xs uppercase tracking-[0.15em] text-[var(--cyan)] underline underline-offset-4 hover:text-white disabled:opacity-50";
 
-      <main className="relative mx-auto flex min-h-screen max-w-[1500px] flex-col gap-10 px-6 pb-16 pt-12">
-        <header className="flex flex-col gap-6 rounded-[32px] border border-[var(--stroke)] bg-white/80 p-8 shadow-[var(--shadow)] backdrop-blur">
-          <div className="flex flex-wrap items-start justify-between gap-6">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[var(--gray-text)]">
-                Single Board Kanban
-              </p>
-              <h1 className="mt-3 font-display text-4xl font-semibold text-[var(--navy-dark)]">
+  return (
+    <main className="mx-auto flex min-h-screen w-full max-w-[2400px] flex-col gap-4 overflow-x-clip px-4 py-4 sm:px-6 lg:px-8">
+      <header className="hud-panel px-5 py-4">
+        <div className="flex flex-wrap items-center gap-x-8 gap-y-4">
+          <div className="shrink-0">
+            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.35em] text-[var(--magenta)]">
+              SYS://single_board <span className="text-[var(--muted)]">{"// link stable"}</span>
+            </p>
+            <h1 className="mt-1 font-display text-2xl font-black uppercase sm:text-3xl">
+              <span className="glitch">
                 Kanban Studio
-              </h1>
-              <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--gray-text)]">
-                Keep momentum visible. Rename columns, drag cards between stages,
-                and capture quick notes without getting buried in settings.
-              </p>
-            </div>
-            <div className="space-y-3">
-              <div className="rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] px-5 py-4">
-                <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--gray-text)]">
-                  Focus
-                </p>
-                <p className="mt-2 text-lg font-semibold text-[var(--primary-blue)]">
-                  One board. Five columns. Zero clutter.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={onLogout}
-                disabled={loggingOut || unsaved}
-                className="rounded-full border border-[var(--stroke)] px-4 py-2 text-sm font-semibold text-[var(--navy-dark)] hover:border-[var(--primary-blue)] disabled:opacity-60"
-              >
-                {loggingOut ? "Signing out..." : "Sign out"}
-              </button>
-              {logoutError && <p role="alert" className="text-sm text-red-700">{logoutError}</p>}
-            </div>
+                <span className="glitch-layer glitch-layer-a" aria-hidden="true">Kanban Studio</span>
+                <span className="glitch-layer glitch-layer-b" aria-hidden="true">Kanban Studio</span>
+              </span>
+            </h1>
           </div>
-          <div className="flex flex-wrap items-center gap-4">
-            {board?.columns.map((column) => (
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+            {board?.columns.map((column, index) => (
               <div
                 key={column.id}
-                className="flex items-center gap-2 rounded-full border border-[var(--stroke)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--navy-dark)]"
+                className="flex items-center gap-2 border border-[var(--line)] bg-[var(--field)] px-3 py-1.5 font-mono text-[11px] font-semibold uppercase tracking-[0.15em] text-[var(--text)]"
               >
-                <span className="h-2 w-2 rounded-full bg-[var(--accent-yellow)]" />
-                {column.title}
+                <span className={["neon-cyan", "neon-magenta", "neon-yellow"][index % 3]}>
+                  {column.cardIds.length.toString().padStart(2, "0")}
+                </span>
+                <span>{column.title}</span>
               </div>
             ))}
           </div>
-          {status === "loading" && <p role="status">Loading board...</p>}
-          {status === "load-error" && (
-            <div role="alert" className="text-sm text-red-700">
-              Unable to load the board. <button type="button" onClick={retryLoad} className="underline">Try again</button>
-            </div>
-          )}
-          {board && <p role="status" className="text-sm text-[var(--gray-text)]">
-            {editingCards.size > 0 ? "Card edits are not saved until you select Save." :
-              status === "saved" ? "All changes saved." : status === "saving" ? "Saving changes..." : ""}
-          </p>}
-          {warning && <p role="alert" className="text-sm text-red-700">{warning}</p>}
-          {legacy && (
-            <div className="space-y-3 rounded-xl border border-[var(--stroke)] p-4 text-sm">
-              {legacyBlocked ? (
-                <p>A previous board remains in this tab, but the database board has changed and cannot be replaced by an import.</p>
-              ) : (
-                <p>A previous board was found in this tab. Import it into the untouched database board, or use the database board instead.</p>
-              )}
-              <div className="flex flex-wrap gap-3">
-                {!legacyBlocked && <button type="button" onClick={importLegacy} className="rounded-full bg-[var(--secondary-purple)] px-4 py-2 font-semibold text-white">Import tab board</button>}
-                <button type="button" onClick={keepDatabaseBoard} className="rounded-full border border-[var(--stroke)] px-4 py-2 font-semibold">
-                  {legacyBlocked ? "Dismiss" : "Use database board"}
-                </button>
+          <div className="flex items-center gap-4">
+            {board && (
+              <div className="flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.15em] text-[var(--muted)]">
+                <span className={clsx("status-dot", (status !== "saved" || editingCards.size > 0) && "status-dot-busy")} />
+                <p role="status" className="max-w-[16rem]">
+                  {editingCards.size > 0 ? "Card edits are not saved until you select Save." :
+                    status === "saved" ? "All changes saved." : status === "saving" ? "Saving changes..." : ""}
+                </p>
               </div>
+            )}
+            <button
+              type="button"
+              onClick={onLogout}
+              disabled={loggingOut || unsaved}
+              className="cyber-btn cyber-btn-ghost"
+            >
+              <PowerIcon />
+              {loggingOut ? "Signing out..." : "Sign out"}
+            </button>
+          </div>
+        </div>
+        {logoutError && <p role="alert" className="mt-3 text-sm text-[var(--danger)]">{logoutError}</p>}
+        {status === "loading" && <p role="status" className="cursor-blink mt-3 font-mono text-sm text-[var(--cyan)]">Loading board...</p>}
+        {status === "load-error" && (
+          <div role="alert" className="mt-3 text-sm text-[var(--danger)]">
+            Unable to load the board. <button type="button" onClick={retryLoad} className={linkButton}>Try again</button>
+          </div>
+        )}
+        {warning && <p role="alert" className="mt-3 text-sm text-[var(--danger)]">{warning}</p>}
+        {legacy && (
+          <div className="mt-4 space-y-3 border border-[rgba(249,233,0,0.4)] bg-[rgba(249,233,0,0.05)] p-4 text-sm">
+            {legacyBlocked ? (
+              <p>A previous board remains in this tab, but the database board has changed and cannot be replaced by an import.</p>
+            ) : (
+              <p>A previous board was found in this tab. Import it into the untouched database board, or use the database board instead.</p>
+            )}
+            <div className="flex flex-wrap gap-3">
+              {!legacyBlocked && <button type="button" onClick={importLegacy} className="cyber-btn cyber-btn-primary">Import tab board</button>}
+              <button type="button" onClick={keepDatabaseBoard} className="cyber-btn cyber-btn-ghost">
+                {legacyBlocked ? "Dismiss" : "Use database board"}
+              </button>
             </div>
-          )}
-          {(status === "error" || status === "invalid" || status === "conflict" || status === "expired" || status === "reloading") && (
-            <div className="space-y-3 rounded-xl border border-red-200 p-4 text-sm">
-              <p role="alert" className="text-red-700">
-                {status === "error" && "Unable to save. Your changes are not saved."}
-                {status === "invalid" && "Your changes are not saved. Correct them and retry, or load the latest board to discard them."}
-                {status === "conflict" && "The board changed elsewhere. Your changes are not saved. Loading the latest board will discard these local changes."}
-                {status === "expired" && "Your session expired. Your changes are not saved. Sign in again to retry."}
-                {status === "reloading" && "Loading the latest board..."}
-              </p>
-              {(status === "error" || status === "invalid") && <button type="button" onClick={retrySave} className="mr-3 underline">Retry save</button>}
-              {(status === "conflict" || status === "invalid") && <button type="button" disabled={editingCards.size > 0} onClick={() => void loadLatest()} className="mr-3 underline disabled:opacity-50">Load latest board</button>}
+          </div>
+        )}
+        {errorPanel && (
+          <div className="mt-4 space-y-3 border border-[rgba(255,59,92,0.5)] bg-[rgba(255,59,92,0.07)] p-4 text-sm">
+            <p role="alert" className="text-[var(--danger)]">
+              {status === "error" && "Unable to save. Your changes are not saved."}
+              {status === "invalid" && "Your changes are not saved. Correct them and retry, or load the latest board to discard them."}
+              {status === "conflict" && "The board changed elsewhere. Your changes are not saved. Loading the latest board will discard these local changes."}
+              {status === "expired" && "Your session expired. Your changes are not saved. Sign in again to retry."}
+              {status === "reloading" && "Loading the latest board..."}
+            </p>
+            <div className="flex flex-wrap gap-x-5 gap-y-2">
+              {(status === "error" || status === "invalid") && <button type="button" onClick={retrySave} className={linkButton}>Retry save</button>}
+              {(status === "conflict" || status === "invalid") && <button type="button" disabled={editingCards.size > 0} onClick={() => void loadLatest()} className={linkButton}>Load latest board</button>}
               {status !== "reloading" && (
-                <button type="button" onClick={onLogout} disabled={loggingOut || editingCards.size > 0} className="underline disabled:opacity-50">
+                <button type="button" onClick={onLogout} disabled={loggingOut || editingCards.size > 0} className={linkButton}>
                   Discard unsaved changes and sign out
                 </button>
               )}
-              {status === "expired" && (
-                <form onSubmit={handleReauthenticate} className="flex flex-wrap items-end gap-3">
-                  <label>Username<input required autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} className="block rounded-xl border border-[var(--stroke)] px-3 py-2" /></label>
-                  <label>Password<input required type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} className="block rounded-xl border border-[var(--stroke)] px-3 py-2" /></label>
-                  <button disabled={reauthenticating} type="submit" className="rounded-full bg-[var(--secondary-purple)] px-4 py-2 font-semibold text-white">Sign in and retry</button>
-                  {reauthError && <p role="alert" className="text-red-700">{reauthError}</p>}
-                </form>
-              )}
             </div>
-          )}
-        </header>
-
-        {board && (!legacy || legacyBlocked) && (
-          <div className="grid items-start gap-6 2xl:grid-cols-[minmax(0,1fr)_340px]">
-            <DndContext
-              sensors={sensors}
-              collisionDetection={collisionDetection}
-              onDragStart={handleDragStart}
-              onDragEnd={handleDragEnd}
-            >
-              <fieldset
-                disabled={loggingOut || chatPending || status === "reloading"}
-                className="grid min-w-0 gap-6 lg:grid-cols-5"
-              >
-                {board.columns.map((column) => (
-                  <KanbanColumn
-                    key={column.id}
-                    column={column}
-                    cards={column.cardIds.map((cardId) => board.cards[cardId])}
-                    atCardLimit={Object.keys(board.cards).length >= MAX_CARDS}
-                    onRename={handleRenameColumn}
-                    onAddCard={handleAddCard}
-                    onDeleteCard={handleDeleteCard}
-                    onEditCard={handleEditCard}
-                    onEditingChange={handleEditingChange}
-                  />
-                ))}
-              </fieldset>
-              <DragOverlay>
-                {activeCard ? (
-                  <div className="w-[260px]">
-                    <KanbanCardPreview card={activeCard} />
-                  </div>
-                ) : null}
-              </DragOverlay>
-            </DndContext>
-            <AIChatSidebar
-              disabled={loggingOut || status !== "saved" || editingCards.size > 0}
-              onBoardUpdate={acceptServerBoard}
-              onConflict={loadLatest}
-              onPendingChange={setChatPending}
-              onSessionExpired={onSessionExpired}
-            />
+            {status === "expired" && (
+              <form onSubmit={handleReauthenticate} className="flex flex-wrap items-end gap-3">
+                <label className="font-mono text-xs uppercase tracking-[0.15em] text-[var(--muted)]">Username<input required autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} className="cyber-input mt-1 block normal-case" /></label>
+                <label className="font-mono text-xs uppercase tracking-[0.15em] text-[var(--muted)]">Password<input required type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} className="cyber-input mt-1 block" /></label>
+                <button disabled={reauthenticating} type="submit" className="cyber-btn cyber-btn-primary">Sign in and retry</button>
+                {reauthError && <p role="alert" className="text-[var(--danger)]">{reauthError}</p>}
+              </form>
+            )}
           </div>
         )}
-      </main>
-    </div>
+      </header>
+
+      {board && (!legacy || legacyBlocked) && (
+        <div className="grid items-start gap-4 2xl:grid-cols-[minmax(0,1fr)_380px]">
+          <DndContext
+            sensors={sensors}
+            collisionDetection={collisionDetection}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+          >
+            <fieldset
+              disabled={loggingOut || chatPending || status === "reloading"}
+              className="grid min-w-0 gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5"
+            >
+              {board.columns.map((column, index) => (
+                <KanbanColumn
+                  key={column.id}
+                  column={column}
+                  index={index}
+                  cards={column.cardIds.map((cardId) => board.cards[cardId])}
+                  atCardLimit={Object.keys(board.cards).length >= MAX_CARDS}
+                  onRename={handleRenameColumn}
+                  onAddCard={handleAddCard}
+                  onDeleteCard={handleDeleteCard}
+                  onEditCard={handleEditCard}
+                  onEditingChange={handleEditingChange}
+                />
+              ))}
+            </fieldset>
+            <DragOverlay>
+              {activeCard ? (
+                <div className="w-[260px]">
+                  <KanbanCardPreview card={activeCard} />
+                </div>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+          <AIChatSidebar
+            disabled={loggingOut || status !== "saved" || editingCards.size > 0}
+            onBoardUpdate={acceptServerBoard}
+            onConflict={loadLatest}
+            onPendingChange={setChatPending}
+            onSessionExpired={onSessionExpired}
+          />
+        </div>
+      )}
+    </main>
   );
 };

@@ -13,7 +13,7 @@
 - Previous tab-only boards can be imported with the user's consent only if the database board remains at revision 0. The import uses that revision as a precondition; old tab data is retained on acceptance, refusal, conflict, or failure.
 - Browser tests use an isolated container and volume because they reset the test board. They run with an installed Chrome or Edge; Playwright's Chromium download stalled, so Edge was used for verification.
 - Keep the OpenRouter key server-side. The current model is `nvidia/nemotron-3.5-super-vl:free`, selected after the original `nvidia/nemotron-3-ultra-550b-a55b:free` model failed the Structured Outputs check.
-- Preserve the existing visual style and the color scheme in the project instructions. Keep the README concise.
+- On 2026-11-23, at the user's request, the UI was restyled with a dark cyberpunk theme (see the color scheme in `AGENTS.md`), a compact full-width layout, and icon buttons for card edit/delete. Keep the README concise.
 - The Part 6 Docker `npm ci` reported 25 dependency vulnerabilities, including 4 critical. They were fixed on 2026-11-23 (Next.js 16.4.6, Vitest 5, `npm audit fix`); `npm audit` and `pip-audit` then reported none.
 
 ## Part 1: Plan
